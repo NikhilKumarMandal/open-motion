@@ -3,6 +3,7 @@ let screenVideoEl = null;
 let camVideoEl = null;
 let previewCtx = null;
 let zoomSegments = [];
+let clickEvents = []; // cursorEvents filtered down to down/click, re-scanned every rendered frame
 let durationMs = 0;
 let previewTimeMs = 0;
 let previewPlayback = null;
@@ -85,12 +86,28 @@ function waitForMetadata(videoEl) {
  */
 function drivePlayback({ screenVideoEl: sv, camVideoEl: cv, segments, onFrame, onDone }) {
   let stopped = false;
-  let rafId = null;
+  let frameHandle = null;
   let segIndex = 0;
 
   if (!segments.length) {
     onDone();
     return { stop: () => {} };
+  }
+
+  // requestAnimationFrame is tied to paint and browsers fully suspend it while the
+  // document is hidden (backgrounded/minimized tab) — during export that leaves the
+  // MediaRecorder repeating the last painted canvas frame for however long the tab
+  // was out of focus, i.e. a frozen export even though playback (which nobody is
+  // recording) looks fine. requestVideoFrameCallback is tied to the video decoder
+  // instead of paint, so it keeps firing in a hidden tab and export stays live.
+  const useVideoFrameCallback = typeof sv.requestVideoFrameCallback === 'function';
+  function scheduleFrame() {
+    frameHandle = useVideoFrameCallback ? sv.requestVideoFrameCallback(frame) : requestAnimationFrame(frame);
+  }
+  function cancelScheduledFrame() {
+    if (frameHandle == null) return;
+    if (useVideoFrameCallback) sv.cancelVideoFrameCallback(frameHandle);
+    else cancelAnimationFrame(frameHandle);
   }
 
   const segOffsets = [];
@@ -103,11 +120,22 @@ function drivePlayback({ screenVideoEl: sv, camVideoEl: cv, segments, onFrame, o
   function finish() {
     if (stopped) return;
     stopped = true;
-    cancelAnimationFrame(rafId);
+    cancelScheduledFrame();
+    sv.removeEventListener('ended', onSourceEnded);
     sv.pause();
     if (cv) cv.pause();
     onDone();
   }
+
+  // requestVideoFrameCallback only fires for a newly-presented frame, so once the
+  // source video reaches the end of its own duration (the common case: the last
+  // kept segment ends where the recording does) no further frame arrives to notice
+  // the boundary and finish the export — it hangs forever at ~100%. The 'ended'
+  // event fires reliably regardless, so use it to force that same check.
+  function onSourceEnded() {
+    frame();
+  }
+  sv.addEventListener('ended', onSourceEnded);
 
   function advanceToNextSegment() {
     segIndex += 1;
@@ -117,7 +145,7 @@ function drivePlayback({ screenVideoEl: sv, camVideoEl: cv, segments, onFrame, o
     }
     const nextStart = segments[segIndex][0] / 1000;
     Promise.all([seekTo(sv, nextStart), cv ? seekTo(cv, nextStart) : Promise.resolve()]).then(() => {
-      if (!stopped) rafId = requestAnimationFrame(frame);
+      if (!stopped) scheduleFrame();
     });
   }
 
@@ -131,14 +159,14 @@ function drivePlayback({ screenVideoEl: sv, camVideoEl: cv, segments, onFrame, o
     }
     const elapsedKeptMs = segOffsets[segIndex] + (tMs - segments[segIndex][0]);
     onFrame(tMs, elapsedKeptMs);
-    rafId = requestAnimationFrame(frame);
+    scheduleFrame();
   }
 
   const firstStart = segments[0][0] / 1000;
   Promise.all([seekTo(sv, firstStart), cv ? seekTo(cv, firstStart) : Promise.resolve()])
     .then(() => Promise.all([sv.play(), cv ? cv.play() : Promise.resolve()]))
     .then(() => {
-      if (!stopped) rafId = requestAnimationFrame(frame);
+      if (!stopped) scheduleFrame();
     });
 
   return { stop: finish };
@@ -150,7 +178,7 @@ function buildRenderState(tMs) {
     camVideoEl: settings.webcamPip.enabled && camVideoEl ? camVideoEl : null,
     t: tMs,
     segments: zoomSegments,
-    cursorEvents: recording.cursorEvents || [],
+    cursorEvents: clickEvents,
     background: settings.background,
     insetPadFrac: settings.insetPadFrac,
     browserFrame: settings.browserFrame,
@@ -172,6 +200,13 @@ async function renderAtTime(tMs) {
 
 function recomputeZoomSegments() {
   zoomSegments = computeZoomSegments(recording.cursorEvents || [], settings.zoomDepth);
+  // Click-effect rendering only cares about down/click events, but cursorEvents is
+  // dominated by ~30Hz mousemove samples — pre-filtering once here instead of
+  // rescanning the whole (much larger) raw array on every rendered frame is what
+  // keeps preview/export playback smooth on longer recordings.
+  clickEvents = (recording.cursorEvents || []).filter(
+    (e) => (e.kind === 'down' || e.kind === 'click') && e.nx !== undefined
+  );
 }
 
 function setupCanvasSize() {
@@ -564,6 +599,7 @@ async function runExport() {
   });
 
   exportRecorder.start();
+  const exportStartedAtMs = performance.now();
 
   const exportSegments = computeKeptSegments(settings.trimStartMs, settings.trimEndMs, settings.cuts);
   const totalKeptMs = exportSegments.reduce((sum, [a, b]) => sum + (b - a), 0);
@@ -575,7 +611,16 @@ async function runExport() {
     onFrame: (tMs, elapsedKeptMs) => {
       renderComposite(exportCtx, exportCanvas, buildRenderState(tMs));
       const pct = totalKeptMs > 0 ? Math.min(100, Math.round((elapsedKeptMs / totalKeptMs) * 100)) : 100;
-      els.exportStatus.textContent = `Exporting… ${pct}%`;
+      // Export plays the clip back in real time to capture audio, so elapsed-so-far
+      // is the best predictor of what's left — extrapolate remaining wall time from
+      // the same pace rather than assuming a fixed (and often wrong) 1x rate.
+      const elapsedRealMs = performance.now() - exportStartedAtMs;
+      let etaSuffix = '';
+      if (elapsedKeptMs > 500 && totalKeptMs > elapsedKeptMs) {
+        const remainingMs = (elapsedRealMs / elapsedKeptMs) * (totalKeptMs - elapsedKeptMs);
+        etaSuffix = ` (${formatTime(remainingMs)} left)`;
+      }
+      els.exportStatus.textContent = `Exporting… ${pct}%${etaSuffix}`;
     },
     onDone: () => {
       if (exportRecorder.state !== 'inactive') exportRecorder.stop();

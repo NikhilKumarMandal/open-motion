@@ -8,6 +8,39 @@ let maskImageData = null;
 let personLayerCanvas = null;
 let personLayerCtx = null;
 
+// Re-running the CPU segmentation model on every single rendered frame is the
+// dominant cost of exporting with a webcam background effect on — a talking-head
+// mask barely changes within a fraction of a second, so we cap actual inference
+// to this rate and reuse the last mask for frames in between (still recomposited
+// against that frame's live video pixels, so only the mask, not the image, is stale).
+const OM_SEGMENT_INTERVAL_MS = 100;
+let lastSegmentAtMs = -Infinity;
+let cachedMaskCanvas = null;
+
+// Feeding the model a downscaled copy instead of the full webcam resolution
+// cuts CPU-delegate preprocessing cost without affecting mask quality — the
+// model's own input resolution is fixed regardless of source size.
+const OM_SEGMENT_INPUT_MAX_DIM = 256;
+let segmentInputCanvas = null;
+let segmentInputCtx = null;
+
+function getSegmentInput(videoEl) {
+  const vw = videoEl.videoWidth;
+  const vh = videoEl.videoHeight;
+  const scale = Math.min(1, OM_SEGMENT_INPUT_MAX_DIM / Math.max(vw, vh));
+  const w = Math.max(1, Math.round(vw * scale));
+  const h = Math.max(1, Math.round(vh * scale));
+  if (scale >= 1) return videoEl;
+  if (!segmentInputCanvas || segmentInputCanvas.width !== w || segmentInputCanvas.height !== h) {
+    segmentInputCanvas = document.createElement('canvas');
+    segmentInputCanvas.width = w;
+    segmentInputCanvas.height = h;
+    segmentInputCtx = segmentInputCanvas.getContext('2d');
+  }
+  segmentInputCtx.drawImage(videoEl, 0, 0, w, h);
+  return segmentInputCanvas;
+}
+
 async function initSegmenter() {
   if (segmenterInstance) return segmenterInstance;
   if (!initPromise) {
@@ -62,26 +95,33 @@ function maskToCanvas(mask) {
 function getPersonLayerCanvas(videoEl, targetW, targetH) {
   if (!segmenterInstance || !videoEl.videoWidth) return null;
 
-  let result;
-  try {
-    // A monotonically increasing wall-clock timestamp is required by the video
-    // running mode, and is safe to use here since it doesn't need to match the
-    // video's own currentTime — we only need per-frame segmentation, not
-    // temporal smoothing tied to playback position (which can seek backwards).
-    result = segmenterInstance.segmentForVideo(videoEl, performance.now());
-  } catch (err) {
-    console.warn('Segmentation failed for this frame', err);
-    return null;
-  }
+  const now = performance.now();
+  let maskCanvasSrc = cachedMaskCanvas;
 
-  const mask = result.confidenceMasks && result.confidenceMasks[0];
-  if (!mask) {
+  if (!maskCanvasSrc || now - lastSegmentAtMs >= OM_SEGMENT_INTERVAL_MS) {
+    let result;
+    try {
+      // A monotonically increasing wall-clock timestamp is required by the video
+      // running mode, and is safe to use here since it doesn't need to match the
+      // video's own currentTime — we only need per-frame segmentation, not
+      // temporal smoothing tied to playback position (which can seek backwards).
+      result = segmenterInstance.segmentForVideo(getSegmentInput(videoEl), now);
+    } catch (err) {
+      console.warn('Segmentation failed for this frame', err);
+      return null;
+    }
+
+    const mask = result.confidenceMasks && result.confidenceMasks[0];
+    if (!mask) {
+      result.close();
+      return null;
+    }
+
+    maskCanvasSrc = maskToCanvas(mask);
     result.close();
-    return null;
+    cachedMaskCanvas = maskCanvasSrc;
+    lastSegmentAtMs = now;
   }
-
-  const maskCanvasSrc = maskToCanvas(mask);
-  result.close();
 
   if (!personLayerCanvas || personLayerCanvas.width !== targetW || personLayerCanvas.height !== targetH) {
     personLayerCanvas = document.createElement('canvas');
