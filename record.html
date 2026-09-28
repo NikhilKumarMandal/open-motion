@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Open Motion — Recorder</title>
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/record.css" />
+  </head>
+  <body>
+    <div class="card">
+      <section id="setupScreen">
+        <h1>Ready to record</h1>
+        <div class="sub">
+          Recording this tab directly gets automatic zoom &amp; click
+          effects in the editor — no share picker, so there's no risk of
+          accidentally sharing the wrong tab.
+        </div>
+
+        <div class="option-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="camToggle" checked />
+            <span>Include webcam overlay (picture-in-picture)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="micToggle" checked />
+            <span>Include microphone audio</span>
+          </label>
+        </div>
+        <div class="option-group">
+          <label for="quality">Quality</label>
+          <select id="quality">
+            <option value="720">720p</option>
+            <option value="1080" selected>1080p</option>
+            <option value="1440">1440p</option>
+            <option value="2160">4K</option>
+          </select>
+        </div>
+
+        <div class="target-tab-info" id="targetTabInfo" hidden></div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="startBtn">Start Recording This Tab</button>
+        </div>
+        <div class="actions">
+          <button class="btn-link" id="startWindowBtn">Record a window or screen instead (no zoom)</button>
+        </div>
+      </section>
+
+      <section id="liveScreen" hidden>
+        <div class="live-header">
+          <div class="rec-badge"><span class="rec-dot"></span> Recording</div>
+          <div class="timer" id="liveTimer">00:00</div>
+        </div>
+        <div class="capture-info" id="captureInfo" hidden></div>
+        <div class="track-count" id="trackCount" hidden></div>
+        <div class="preview-wrap">
+          <video id="previewVideo" muted playsinline></video>
+          <video id="camPreviewOverlay" class="cam-overlay" hidden muted playsinline></video>
+        </div>
+        <div class="actions">
+          <button class="btn btn-secondary" id="pauseLiveBtn">❙❙ Pause</button>
+          <button class="btn btn-danger" id="stopLiveBtn">■ Stop</button>
+        </div>
+      </section>
+
+      <section id="processingScreen" hidden>
+        <h1>Saving recording…</h1>
+        <div class="sub">Writing your footage to local storage, then opening the editor.</div>
+        <div class="spinner"></div>
+      </section>
+
+      <div class="hidden-media" id="mediaSinks"></div>
+    </div>
+    <script src="db.js"></script>
+    <script src="record.js"></script>
+  </body>
+</html>

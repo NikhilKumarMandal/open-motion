@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Open Motion — Editor</title>
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/editor.css" />
+  </head>
+  <body>
+    <div id="loadingState" class="center-state">
+      <div class="spinner"></div>
+      <div class="sub">Loading recording…</div>
+    </div>
+
+    <div id="errorState" class="center-state" hidden>
+      <h1>Recording not found</h1>
+      <div class="sub">It may have been cleared from local storage.</div>
+    </div>
+
+    <div id="editorRoot" class="layout" hidden>
+      <div class="preview-pane">
+        <canvas id="previewCanvas"></canvas>
+        <div class="playback-row">
+          <button class="btn btn-secondary" id="playPauseBtn">▶ Play</button>
+          <span class="time-label" id="timeLabel">00:00 / 00:00</span>
+          <button class="btn btn-secondary" id="markCutBtn">✂ Mark cut here</button>
+          <button class="btn-link" id="cancelCutBtn" hidden>Cancel</button>
+        </div>
+        <div
+          class="timeline"
+          id="timeline"
+          tabindex="0"
+          role="slider"
+          aria-label="Playback position"
+          aria-valuemin="0"
+          aria-valuenow="0"
+        >
+          <div class="filmstrip" id="filmstrip"></div>
+          <div class="trim-dim trim-dim-left" id="trimDimLeft"></div>
+          <div class="trim-dim trim-dim-right" id="trimDimRight"></div>
+          <div class="cut-regions" id="cutRegions"></div>
+          <div class="pending-cut-marker" id="pendingCutMarker" hidden></div>
+          <div
+            class="handle handle-start"
+            id="handleStart"
+            tabindex="0"
+            role="slider"
+            aria-label="Trim start"
+            aria-valuemin="0"
+            aria-valuenow="0"
+          ></div>
+          <div
+            class="handle handle-end"
+            id="handleEnd"
+            tabindex="0"
+            role="slider"
+            aria-label="Trim end"
+            aria-valuemin="0"
+            aria-valuenow="0"
+          ></div>
+          <div class="playhead" id="playhead"></div>
+        </div>
+        <div class="zoom-warning" id="zoomWarning" hidden>
+          No cursor data was captured for this recording (you didn't share
+          "This Tab"), so auto zoom &amp; click effects are unavailable —
+          everything else still works.
+        </div>
+      </div>
+
+      <div class="controls-pane">
+        <fieldset>
+          <legend>Zoom &amp; pan</legend>
+          <label class="range-label">
+            Depth: <span id="zoomDepthValue">1.8x</span>
+            <input type="range" id="zoomDepthRange" min="1" max="3" step="0.1" value="1.8" />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Background</legend>
+          <div class="swatches" id="bgSwatches"></div>
+          <label class="file-label">
+            Upload image
+            <input type="file" id="bgUpload" accept="image/*" />
+          </label>
+          <label class="range-label">
+            Padding: <span id="paddingValue">6%</span>
+            <input type="range" id="paddingRange" min="0" max="15" step="1" value="6" />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Browser frame</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" id="browserFrameToggle" />
+            <span>Show fake browser title bar</span>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Click effects</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" id="clickEffectsToggle" checked />
+            <span>Show orb on click</span>
+          </label>
+          <label class="range-label">
+            Color
+            <input type="color" id="clickColor" value="#667eea" />
+          </label>
+          <label class="range-label">
+            Intensity: <span id="intensityValue">60%</span>
+            <input type="range" id="intensityRange" min="10" max="100" step="5" value="60" />
+          </label>
+        </fieldset>
+
+        <fieldset id="webcamFieldset">
+          <legend>Webcam overlay</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" id="webcamToggle" checked />
+            <span>Show webcam picture-in-picture</span>
+          </label>
+          <label class="range-label">
+            Corner
+            <select id="webcamCorner">
+              <option value="br">Bottom right</option>
+              <option value="bl">Bottom left</option>
+              <option value="tr">Top right</option>
+              <option value="tl">Top left</option>
+            </select>
+          </label>
+          <label class="range-label">
+            Size: <span id="webcamSizeValue">22%</span>
+            <input type="range" id="webcamSizeRange" min="12" max="35" step="1" value="22" />
+          </label>
+          <label class="range-label">
+            Background (like Meet/Zoom)
+            <select id="webcamBgMode">
+              <option value="none">None — show my real background</option>
+              <option value="blur">Blur my background</option>
+              <option value="image">Replace with an image</option>
+            </select>
+          </label>
+          <label class="range-label" id="webcamBlurRow" hidden>
+            Blur strength: <span id="webcamBlurValue">14px</span>
+            <input type="range" id="webcamBlurRange" min="4" max="30" step="1" value="14" />
+          </label>
+          <label class="file-label" id="webcamBgUploadRow" hidden>
+            Background image
+            <input type="file" id="webcamBgUpload" accept="image/*" />
+          </label>
+          <div class="sub" id="webcamBgStatus" hidden></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Output</legend>
+          <label class="range-label">
+            Resolution
+            <select id="outputResolution">
+              <option value="720">720p</option>
+              <option value="1080" selected>1080p</option>
+              <option value="1440">1440p</option>
+              <option value="2160">4K</option>
+            </select>
+          </label>
+          <label class="range-label">
+            Frame rate
+            <select id="outputFps">
+              <option value="30" selected>30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </label>
+          <label class="range-label">
+            Bitrate: <span id="bitrateValue">8 Mbps</span>
+            <input type="range" id="bitrateRange" min="2" max="40" step="1" value="8" />
+          </label>
+        </fieldset>
+
+        <div class="export-row">
+          <button class="btn btn-primary" id="exportBtn">Export video</button>
+          <div class="export-status" id="exportStatus"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultOverlay" class="center-state" hidden>
+      <h1>Export ready</h1>
+      <video id="resultVideo" controls></video>
+      <div class="actions">
+        <a class="btn btn-primary" id="downloadLink" download>Download video</a>
+        <button class="btn btn-secondary" id="backToEditBtn">Back to editor</button>
+      </div>
+    </div>
+
+    <div class="hidden-media" id="mediaSinks"></div>
+
+    <script type="module" src="webcam-segmenter.js"></script>
+    <script src="db.js"></script>
+    <script src="zoom-analyzer.js"></script>
+    <script src="video-processor.js"></script>
+    <script src="editor.js"></script>
+  </body>
+</html>

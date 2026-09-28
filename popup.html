@@ -1,14 +1,72 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <style>
-      body { width: 200px; padding: 10px; font-family: sans-serif; }
-      button { width: 100%; padding: 8px; cursor: pointer; }
-    </style>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/popup.css" />
   </head>
   <body>
-    <h3>My Extension</h3>
-    <button id="changeColor">Change Page Color</button>
+    <div class="container">
+      <div class="header">
+        <h1>Open Motion</h1>
+        <div class="subtitle">Screen &amp; webcam recorder for demo videos</div>
+      </div>
+
+      <div class="status-section">
+        <div class="status-indicator">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Idle</span>
+        </div>
+        <div class="timer" id="timer">00:00</div>
+      </div>
+
+      <div class="controls">
+        <button class="btn btn-primary" id="startBtn">
+          <span class="btn-icon">●</span> Start Recording
+        </button>
+        <button class="btn btn-secondary" id="pauseBtn" disabled>
+          <span class="btn-icon">❙❙</span> Pause
+        </button>
+        <button class="btn btn-danger" id="stopBtn" disabled>
+          <span class="btn-icon">■</span> Stop
+        </button>
+      </div>
+
+      <div class="options">
+        <h3>Options</h3>
+        <div class="option-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="camToggle" checked />
+            <span>Include webcam overlay</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="micToggle" checked />
+            <span>Include microphone</span>
+          </label>
+        </div>
+        <div class="option-group">
+          <label for="quality">Quality</label>
+          <select id="quality">
+            <option value="720">720p</option>
+            <option value="1080" selected>1080p</option>
+            <option value="1440">1440p</option>
+            <option value="2160">4K</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="info">
+        <div class="info-text">
+          Recording opens in a new tab. It records this tab directly — no
+          share picker, so zoom &amp; click effects always work. Everything
+          stays on your device — nothing is uploaded.
+        </div>
+      </div>
+
+      <div class="footer">
+        <button class="btn-link" id="openRecorderBtn">Open recorder tab</button>
+      </div>
+    </div>
     <script src="popup.js"></script>
   </body>
 </html>
