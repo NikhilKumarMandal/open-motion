@@ -1,72 +1,103 @@
+<!--
+  CursorFly Screen Recorder
+  Copyright (c) 2026 Anu S Pillai
+  GitHub: https://github.com/anugotta
+
+  Licensed under the MIT License.
+-->
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <link rel="stylesheet" href="styles/tokens.css" />
-    <link rel="stylesheet" href="styles/popup.css" />
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h1>Open Motion</h1>
-        <div class="subtitle">Screen &amp; webcam recorder for demo videos</div>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cursorfly - Screen Recorder with Auto Pan Zoom</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎥 Screen Recorder</h1>
+      <p class="subtitle">Record locally with cursor tracking</p>
+    </div>
+
+    <div class="status-section" id="statusSection">
+      <div class="status-indicator" id="statusIndicator">
+        <span class="status-dot"></span>
+        <span id="statusText">Ready to record</span>
+      </div>
+      <div class="timer" id="timer">00:00</div>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn" class="btn btn-primary">
+        <span class="btn-icon">●</span>
+        Start Recording
+      </button>
+      <button id="stopBtn" class="btn btn-danger" style="display: none;">
+        <span class="btn-icon">■</span>
+        Stop Recording
+      </button>
+      <button id="pauseBtn" class="btn btn-secondary" style="display: none;">
+        <span class="btn-icon">⏸</span>
+        Pause
+      </button>
+    </div>
+
+    <div class="options">
+      <h3>Recording Options</h3>
+      
+      <div class="option-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="trackCursor" checked>
+          <span>Track cursor movements</span>
+        </label>
       </div>
 
-      <div class="status-section">
-        <div class="status-indicator">
-          <div class="status-dot" id="statusDot"></div>
-          <span id="statusText">Idle</span>
-        </div>
-        <div class="timer" id="timer">00:00</div>
+      <div class="option-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="recordAudio">
+          <span>Record system audio</span>
+        </label>
       </div>
 
-      <div class="controls">
-        <button class="btn btn-primary" id="startBtn">
-          <span class="btn-icon">●</span> Start Recording
-        </button>
-        <button class="btn btn-secondary" id="pauseBtn" disabled>
-          <span class="btn-icon">❙❙</span> Pause
-        </button>
-        <button class="btn btn-danger" id="stopBtn" disabled>
-          <span class="btn-icon">■</span> Stop
-        </button>
+      <div class="option-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="recordMicrophone">
+          <span>Record microphone</span>
+        </label>
       </div>
 
-      <div class="options">
-        <h3>Options</h3>
-        <div class="option-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="camToggle" checked />
-            <span>Include webcam overlay</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="micToggle" checked />
-            <span>Include microphone</span>
-          </label>
-        </div>
-        <div class="option-group">
-          <label for="quality">Quality</label>
-          <select id="quality">
-            <option value="720">720p</option>
-            <option value="1080" selected>1080p</option>
-            <option value="1440">1440p</option>
-            <option value="2160">4K</option>
-          </select>
-        </div>
+      <div class="option-group">
+        <label for="quality">Video Quality:</label>
+        <select id="quality">
+          <option value="1080">1080p (Full HD)</option>
+          <option value="720" selected>720p (HD)</option>
+          <option value="480">480p (SD)</option>
+        </select>
       </div>
 
-      <div class="info">
-        <div class="info-text">
-          Recording opens in a new tab. It records this tab directly — no
-          share picker, so zoom &amp; click effects always work. Everything
-          stays on your device — nothing is uploaded.
-        </div>
-      </div>
-
-      <div class="footer">
-        <button class="btn-link" id="openRecorderBtn">Open recorder tab</button>
+      <div class="option-group">
+        <label for="fps">Frame Rate:</label>
+        <select id="fps">
+          <option value="60">60 FPS</option>
+          <option value="30" selected>30 FPS</option>
+          <option value="24">24 FPS</option>
+        </select>
       </div>
     </div>
-    <script src="popup.js"></script>
-  </body>
+
+    <div class="info">
+      <p class="info-text">
+        ℹ️ All recordings are processed locally on your device. No data is uploaded to any server.
+      </p>
+    </div>
+
+    <div class="footer">
+      <button id="processorBtn" class="btn-link">✨ Add Zoom Effects</button>
+      <button id="settingsBtn" class="btn-link">⚙️ Settings</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
 </html>

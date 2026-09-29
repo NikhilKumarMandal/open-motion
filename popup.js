@@ -1,121 +1,237 @@
+/**
+ * CursorFly Screen Recorder
+ * Copyright (c) 2026 Anu S Pillai
+ * GitHub: https://github.com/anugotta
+ *
+ * Licensed under the MIT License.
+ */
+
+// Popup UI Controller
+let isRecording = false;
+let isPaused = false;
+let timerInterval = null;
+let startTime = 0;
+let elapsedTime = 0;
+
+// DOM Elements
 const startBtn = document.getElementById('startBtn');
-const pauseBtn = document.getElementById('pauseBtn');
 const stopBtn = document.getElementById('stopBtn');
-const openRecorderBtn = document.getElementById('openRecorderBtn');
-const statusDot = document.getElementById('statusDot');
+const pauseBtn = document.getElementById('pauseBtn');
 const statusText = document.getElementById('statusText');
-const timerEl = document.getElementById('timer');
-const camToggle = document.getElementById('camToggle');
-const micToggle = document.getElementById('micToggle');
-const qualitySelect = document.getElementById('quality');
+const statusDot = document.querySelector('.status-dot');
+const timerDisplay = document.getElementById('timer');
+const trackCursor = document.getElementById('trackCursor');
+const recordAudio = document.getElementById('recordAudio');
+const recordMicrophone = document.getElementById('recordMicrophone');
+const quality = document.getElementById('quality');
+const fps = document.getElementById('fps');
 
-let tickHandle = null;
-
-function formatElapsed(ms) {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
-  const ss = String(totalSec % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
-}
-
-function renderState(state) {
-  const status = state?.status || 'idle';
-
-  statusDot.classList.remove('recording', 'paused');
-  if (status === 'recording') statusDot.classList.add('recording');
-  if (status === 'paused') statusDot.classList.add('paused');
-
-  statusText.textContent =
-    status === 'recording' ? 'Recording' :
-    status === 'paused' ? 'Paused' :
-    status === 'stopped' ? 'Finished — check recorder tab' :
-    'Idle';
-
-  startBtn.disabled = status === 'recording' || status === 'paused';
-  pauseBtn.disabled = status === 'idle' || status === 'stopped';
-  pauseBtn.textContent = status === 'paused' ? '▶ Resume' : '❙❙ Pause';
-  stopBtn.disabled = status === 'idle' || status === 'stopped';
-
-  clearInterval(tickHandle);
-  if (status === 'recording' || status === 'paused') {
-    const tick = () => {
-      const pausedMs = state.totalPausedMs || 0;
-      const extraPause = status === 'paused' ? Date.now() - state.pausedAt : 0;
-      timerEl.textContent = formatElapsed(Date.now() - state.startedAt - pausedMs - extraPause);
-    };
-    tick();
-    tickHandle = setInterval(tick, 500);
-  } else {
-    timerEl.textContent = '00:00';
-  }
-}
-
-async function loadState() {
-  const { recordingState } = await chrome.storage.local.get('recordingState');
-  renderState(recordingState);
-  return recordingState;
-}
-
-async function focusOrCreateRecorderTab() {
-  const { recordingState } = await chrome.storage.local.get('recordingState');
-  const tabId = recordingState?.tabId;
-  if (tabId) {
-    try {
-      const tab = await chrome.tabs.get(tabId);
-      await chrome.tabs.update(tab.id, { active: true });
-      await chrome.windows.update(tab.windowId, { focused: true });
-      return tab.id;
-    } catch {
-      // tab no longer exists, fall through to creating a new one
+// Initialize
+document.addEventListener('DOMContentLoaded', async () => {
+  // Load saved settings
+  const settings = await chrome.storage.local.get(['trackCursor', 'recordAudio', 'recordMicrophone', 'quality', 'fps']);
+  
+  if (settings.trackCursor !== undefined) trackCursor.checked = settings.trackCursor;
+  if (settings.recordAudio !== undefined) recordAudio.checked = settings.recordAudio;
+  if (settings.recordMicrophone !== undefined) recordMicrophone.checked = settings.recordMicrophone;
+  if (settings.quality) quality.value = settings.quality;
+  if (settings.fps) fps.value = settings.fps;
+  
+  // Check if already recording
+  const status = await chrome.storage.local.get(['isRecording', 'isPaused']);
+  if (status.isRecording) {
+    showRecordingUI();
+    if (status.isPaused) {
+      showPausedState();
     }
   }
-  const tab = await chrome.tabs.create({ url: chrome.runtime.getURL('record.html') });
-  return tab.id;
-}
+});
 
-async function getActiveTabId() {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return activeTab?.id ?? null;
-}
+// Save settings when changed
+trackCursor.addEventListener('change', saveSettings);
+recordAudio.addEventListener('change', saveSettings);
+recordMicrophone.addEventListener('change', saveSettings);
+quality.addEventListener('change', saveSettings);
+fps.addEventListener('change', saveSettings);
 
-startBtn.addEventListener('click', async () => {
-  // Actual cursor-tracker injection now happens from background.js once
-  // recording really starts (see record.js) — it has persistent host_permissions
-  // and can retry, unlike a one-shot injection tied to this click's activeTab grant.
-  const targetTabId = await getActiveTabId();
+async function saveSettings() {
   await chrome.storage.local.set({
-    recordingOptions: {
-      includeCamera: camToggle.checked,
-      includeMic: micToggle.checked,
-      quality: qualitySelect.value,
-      targetTabId,
-    },
+    trackCursor: trackCursor.checked,
+    recordAudio: recordAudio.checked,
+    recordMicrophone: recordMicrophone.checked,
+    quality: quality.value,
+    fps: fps.value
   });
-  await focusOrCreateRecorderTab();
-});
+}
 
-openRecorderBtn.addEventListener('click', () => {
-  focusOrCreateRecorderTab();
-});
-
-pauseBtn.addEventListener('click', async () => {
-  const { recordingState } = await chrome.storage.local.get('recordingState');
-  if (!recordingState?.tabId) return;
-  const type = recordingState.status === 'paused' ? 'resume' : 'pause';
-  chrome.tabs.sendMessage(recordingState.tabId, { type });
-});
-
-stopBtn.addEventListener('click', async () => {
-  const { recordingState } = await chrome.storage.local.get('recordingState');
-  if (!recordingState?.tabId) return;
-  chrome.tabs.sendMessage(recordingState.tabId, { type: 'stop' });
-  await chrome.tabs.update(recordingState.tabId, { active: true });
-});
-
-chrome.storage.onChanged.addListener((changes) => {
-  if (changes.recordingState) {
-    renderState(changes.recordingState.newValue);
+// Start Recording
+startBtn.addEventListener('click', async () => {
+  try {
+    startBtn.disabled = true;
+    statusText.textContent = 'Requesting screen access...';
+    
+    // Get current tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    // Send message to background script to start recording
+    const response = await chrome.runtime.sendMessage({
+      action: 'startRecording',
+      tabId: tab.id,
+      settings: {
+        trackCursor: trackCursor.checked,
+        recordAudio: recordAudio.checked,
+        recordMicrophone: recordMicrophone.checked,
+        quality: quality.value,
+        fps: fps.value
+      }
+    });
+    
+    if (response.success) {
+      showRecordingUI();
+      startTimer();
+      statusText.textContent = 'Recording...';
+    } else {
+      statusText.textContent = 'Failed to start recording';
+      startBtn.disabled = false;
+      alert('Error: ' + (response.error || 'Failed to start recording'));
+    }
+  } catch (error) {
+    console.error('Error starting recording:', error);
+    statusText.textContent = 'Error starting recording';
+    startBtn.disabled = false;
+    alert('Error: ' + error.message);
   }
 });
 
-loadState();
+// Stop Recording
+stopBtn.addEventListener('click', async () => {
+  try {
+    stopBtn.disabled = true;
+    statusText.textContent = 'Stopping and processing...';
+    
+    const response = await chrome.runtime.sendMessage({ action: 'stopRecording' });
+    
+    if (response.success) {
+      showStoppedUI();
+      stopTimer();
+      statusText.textContent = 'Recording saved!';
+      
+      // Show success message
+      setTimeout(() => {
+        statusText.textContent = 'Ready to record';
+      }, 3000);
+    } else {
+      statusText.textContent = 'Error stopping recording';
+      stopBtn.disabled = false;
+    }
+  } catch (error) {
+    console.error('Error stopping recording:', error);
+    statusText.textContent = 'Error stopping recording';
+    stopBtn.disabled = false;
+  }
+});
+
+// Pause/Resume Recording
+pauseBtn.addEventListener('click', async () => {
+  try {
+    if (isPaused) {
+      // Resume
+      await chrome.runtime.sendMessage({ action: 'resumeRecording' });
+      pauseBtn.innerHTML = '<span class="btn-icon">⏸</span>Pause';
+      statusText.textContent = 'Recording...';
+      statusDot.classList.remove('paused');
+      statusDot.classList.add('recording');
+      isPaused = false;
+      startTimer();
+    } else {
+      // Pause
+      await chrome.runtime.sendMessage({ action: 'pauseRecording' });
+      pauseBtn.innerHTML = '<span class="btn-icon">▶</span>Resume';
+      statusText.textContent = 'Paused';
+      showPausedState();
+    }
+  } catch (error) {
+    console.error('Error pausing/resuming:', error);
+  }
+});
+
+function showRecordingUI() {
+  isRecording = true;
+  startBtn.style.display = 'none';
+  stopBtn.style.display = 'flex';
+  pauseBtn.style.display = 'flex';
+  statusDot.classList.add('recording');
+  
+  // Disable options during recording
+  document.querySelectorAll('.options input, .options select').forEach(el => {
+    el.disabled = true;
+  });
+}
+
+function showStoppedUI() {
+  isRecording = false;
+  isPaused = false;
+  startBtn.style.display = 'flex';
+  stopBtn.style.display = 'none';
+  pauseBtn.style.display = 'none';
+  startBtn.disabled = false;
+  statusDot.classList.remove('recording', 'paused');
+  
+  // Re-enable options
+  document.querySelectorAll('.options input, .options select').forEach(el => {
+    el.disabled = false;
+  });
+}
+
+function showPausedState() {
+  isPaused = true;
+  statusDot.classList.remove('recording');
+  statusDot.classList.add('paused');
+  stopTimer();
+}
+
+function startTimer() {
+  startTime = Date.now() - elapsedTime;
+  timerInterval = setInterval(updateTimer, 100);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  if (!isRecording) {
+    elapsedTime = 0;
+    timerDisplay.textContent = '00:00';
+  }
+}
+
+function updateTimer() {
+  elapsedTime = Date.now() - startTime;
+  const seconds = Math.floor(elapsedTime / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+// Processor and Settings buttons
+document.getElementById('processorBtn').addEventListener('click', () => {
+  // Open video processor in new tab
+  chrome.tabs.create({
+    url: chrome.runtime.getURL('processor.html')
+  });
+});
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  // Open settings page (to be implemented)
+  alert('Settings page coming soon!');
+});
+
+// Listen for messages from background script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'recordingStopped') {
+    showStoppedUI();
+    stopTimer();
+    statusText.textContent = 'Ready to record';
+  }
+});

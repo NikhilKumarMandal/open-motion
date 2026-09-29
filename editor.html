@@ -1,202 +1,1604 @@
+<!--
+  CursorFly Screen Recorder
+  Copyright (c) 2026 Anu S Pillai
+  GitHub: https://github.com/anugotta
+
+  Licensed under the MIT License.
+-->
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Open Motion — Editor</title>
-    <link rel="stylesheet" href="styles/tokens.css" />
-    <link rel="stylesheet" href="styles/editor.css" />
-  </head>
-  <body>
-    <div id="loadingState" class="center-state">
-      <div class="spinner"></div>
-      <div class="sub">Loading recording…</div>
-    </div>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Editor | Cursorfly - Screen Recorder with Auto Pan Zoom</title>
+  <link rel="icon" type="image/png" href="icons/icon32.png">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-    <div id="errorState" class="center-state" hidden>
-      <h1>Recording not found</h1>
-      <div class="sub">It may have been cleared from local storage.</div>
-    </div>
+    :root {
+      --bg: #0b0d12;
+      --surface: #12151c;
+      --surface-2: #181c25;
+      --surface-3: #212633;
+      --border: #252a36;
+      --border-strong: #343b4b;
+      --text: #e8eaf0;
+      --text-2: #a0a8b8;
+      --text-3: #6b7385;
+      --accent: #10b981;
+      --accent-strong: #34d399;
+      --accent-soft: rgba(16, 185, 129, 0.14);
+      --accent-ring: rgba(52, 211, 153, 0.35);
+      --danger: #f87171;
+      --trim: #fbbf24;
+      --radius: 10px;
+      --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+      color-scheme: dark;
+    }
 
-    <div id="editorRoot" class="layout" hidden>
-      <div class="preview-pane">
-        <canvas id="previewCanvas"></canvas>
-        <div class="playback-row">
-          <button class="btn btn-secondary" id="playPauseBtn">▶ Play</button>
-          <span class="time-label" id="timeLabel">00:00 / 00:00</span>
-          <button class="btn btn-secondary" id="markCutBtn">✂ Mark cut here</button>
-          <button class="btn-link" id="cancelCutBtn" hidden>Cancel</button>
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      font-family: var(--font);
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+    }
+
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--accent-strong);
+      outline-offset: 2px;
+    }
+
+    svg.icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* ========== LAYOUT ========== */
+    .app {
+      display: grid;
+      grid-template-rows: 56px 1fr auto;
+      grid-template-columns: 1fr 320px;
+      grid-template-areas:
+        "topbar topbar"
+        "preview sidebar"
+        "timeline sidebar";
+      height: 100vh;
+    }
+
+    /* ========== TOP BAR ========== */
+    .topbar {
+      grid-area: topbar;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    .brand img {
+      width: 26px;
+      height: 26px;
+    }
+
+    .topbar-divider {
+      width: 1px;
+      height: 22px;
+      background: var(--border);
+    }
+
+    .recording-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-2);
+      min-width: 0;
+    }
+
+    .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .meta-chip svg.icon {
+      width: 13px;
+      height: 13px;
+      color: var(--text-3);
+    }
+
+    .topbar-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ========== BUTTONS ========== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-size: 13px;
+      font-weight: 550;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #03140d;
+      box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.4) inset, 0 6px 18px -6px rgba(16, 185, 129, 0.6);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-strong);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text-2);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+      background: var(--surface-2);
+      border-color: var(--border-strong);
+      color: var(--text);
+    }
+
+    .btn-sm {
+      height: 28px;
+      padding: 0 10px;
+      font-size: 12px;
+      gap: 6px;
+    }
+
+    .btn-sm svg.icon {
+      width: 14px;
+      height: 14px;
+    }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--text-2);
+      cursor: pointer;
+    }
+
+    .icon-btn:hover:not(:disabled) {
+      background: var(--surface-2);
+      color: var(--text);
+    }
+
+    .icon-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* ========== PREVIEW ========== */
+    .preview-area {
+      grid-area: preview;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      background-color: var(--bg);
+      background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+      background-size: 18px 18px;
+    }
+
+    .video-frame {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    .video-background {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .video-window {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      /* Cinematic smooth transition for zoom effects only */
+      transition: transform 0.3s cubic-bezier(0.33, 1, 0.68, 1), width 0s, height 0s;
+      will-change: transform;
+    }
+
+    .video-window video {
+      display: none;
+    }
+
+    .video-window canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 10px;
+      max-width: 380px;
+      padding: 40px 36px;
+      background: var(--surface);
+      border: 1px dashed var(--border-strong);
+      border-radius: 18px;
+    }
+
+    .empty-state-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 56px;
+      height: 56px;
+      margin-bottom: 6px;
+      border-radius: 16px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+
+    .empty-state-icon svg.icon {
+      width: 26px;
+      height: 26px;
+    }
+
+    .empty-state h2 {
+      font-size: 18px;
+      font-weight: 650;
+    }
+
+    .empty-state p {
+      color: var(--text-2);
+      line-height: 1.5;
+    }
+
+    .empty-state .load-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    /* ========== TIMELINE ========== */
+    .timeline-panel {
+      grid-area: timeline;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 10px 16px 12px;
+      min-width: 0;
+      user-select: none;
+    }
+
+    .transport {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .transport-left,
+    .transport-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .transport-right {
+      margin-left: auto;
+    }
+
+    .play-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #03140d;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .play-btn:hover {
+      background: var(--accent-strong);
+    }
+
+    .play-btn:active {
+      transform: scale(0.95);
+    }
+
+    .play-btn svg.icon {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .time-readout {
+      margin-left: 6px;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+
+    .time-readout .sep,
+    .time-readout .total {
+      color: var(--text-3);
+    }
+
+    .time-readout .sep {
+      margin: 0 6px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      color: var(--text-2);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .chip svg.icon {
+      width: 13px;
+      height: 13px;
+    }
+
+    .chip-trim svg.icon {
+      color: var(--trim);
+    }
+
+    .chip-zoom {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+
+    .transport-divider {
+      width: 1px;
+      height: 20px;
+      margin: 0 4px;
+      background: var(--border);
+    }
+
+    .timeline {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .time-ruler {
+      position: relative;
+      height: 18px;
+      margin-bottom: 4px;
+    }
+
+    .ruler-tick {
+      position: absolute;
+      bottom: 0;
+      width: 1px;
+      height: 5px;
+      background: var(--border-strong);
+    }
+
+    .ruler-tick span {
+      position: absolute;
+      bottom: 7px;
+      left: 0;
+      transform: translateX(-50%);
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--text-3);
+      white-space: nowrap;
+    }
+
+    .ruler-tick:first-child span {
+      transform: none;
+    }
+
+    .track {
+      position: relative;
+      height: 56px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      overflow: hidden;
+    }
+
+    .filmstrip {
+      position: absolute;
+      inset: 0;
+      display: flex;
+    }
+
+    .film-cell {
+      flex: 1;
+      min-width: 0;
+      background: var(--surface-3) center / cover no-repeat;
+      border-right: 1px solid rgba(0, 0, 0, 0.35);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .film-cell.loaded {
+      opacity: 0.85;
+    }
+
+    .zoom-layer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 4px;
+      height: 18px;
+      pointer-events: none;
+    }
+
+    .zoom-layer.is-disabled {
+      opacity: 0.35;
+      filter: grayscale(1);
+    }
+
+    .zoom-marker {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 6px;
+      padding: 0 5px;
+      overflow: hidden;
+      border: 1px solid rgba(52, 211, 153, 0.7);
+      border-radius: 5px;
+      background: rgba(6, 78, 59, 0.85);
+      color: #a7f3d0;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .zoom-marker svg.icon {
+      width: 11px;
+      height: 11px;
+    }
+
+    .zoom-marker:hover {
+      background: rgba(4, 120, 87, 0.95);
+    }
+
+    .zoom-marker.selected {
+      background: rgba(16, 185, 129, 0.75);
+      border-color: #a7f3d0;
+      color: #fff;
+      box-shadow: 0 0 0 2px var(--accent-ring);
+    }
+
+    .trim-shade {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 0;
+      background: rgba(5, 6, 10, 0.72);
+      pointer-events: none;
+    }
+
+    .trim-shade-left {
+      left: 0;
+    }
+
+    .trim-shade-right {
+      right: 0;
+    }
+
+    .trim-window {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      border-top: 2px solid var(--trim);
+      border-bottom: 2px solid var(--trim);
+      border-radius: 8px;
+      pointer-events: none;
+    }
+
+    .trim-handle {
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      width: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--trim);
+      cursor: ew-resize;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    .trim-handle-left {
+      left: 0;
+      border-radius: 8px 0 0 8px;
+    }
+
+    .trim-handle-right {
+      right: 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .trim-handle::before {
+      content: '';
+      width: 2px;
+      height: 18px;
+      border-radius: 1px;
+      background: rgba(0, 0, 0, 0.45);
+    }
+
+    .trim-handle:hover,
+    .trim-handle.active {
+      background: #fcd34d;
+    }
+
+    .playhead {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 2px;
+      margin-left: -1px;
+      background: #fff;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .playhead::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 12px;
+      height: 12px;
+      transform: translate(-50%, -2px);
+      border-radius: 3px 3px 50% 50%;
+      background: #fff;
+    }
+
+    .shortcut-hints {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 14px;
+      margin-top: 10px;
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    kbd {
+      display: inline-block;
+      min-width: 18px;
+      padding: 1px 5px;
+      margin-right: 3px;
+      border: 1px solid var(--border-strong);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      font-family: var(--font);
+      font-size: 10px;
+      text-align: center;
+      color: var(--text-2);
+    }
+
+    .no-video .timeline-panel {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .no-video .trim-window,
+    .no-video .playhead {
+      display: none;
+    }
+
+    /* ========== SIDEBAR ========== */
+    .sidebar {
+      grid-area: sidebar;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+    }
+
+    .sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 18px 24px;
+    }
+
+    .panel-section {
+      padding: 18px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-section:last-child {
+      border-bottom: none;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-2);
+    }
+
+    .section-title svg.icon {
+      width: 15px;
+      height: 15px;
+      color: var(--accent-strong);
+    }
+
+    .badge-beta {
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-size: 9px;
+      letter-spacing: 0.06em;
+    }
+
+    .field-label {
+      margin: 16px 0 8px;
+      font-size: 12px;
+      color: var(--text-2);
+    }
+
+    .field-hint {
+      margin-top: 6px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--text-3);
+    }
+
+    /* Aspect ratio chips */
+    .ratio-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .ratio-option {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-2);
+      color: var(--text-2);
+      font-size: 11px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .ratio-option:hover {
+      border-color: var(--border-strong);
+      color: var(--text);
+    }
+
+    .ratio-shape {
+      display: block;
+      height: 18px;
+      max-width: 34px;
+      border: 1.5px solid currentColor;
+      border-radius: 3px;
+    }
+
+    .ratio-shape.native {
+      aspect-ratio: 16 / 10;
+      border-style: dashed;
+    }
+
+    .ratio-option.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+
+    /* Segmented controls */
+    .segmented {
+      display: flex;
+      padding: 3px;
+      gap: 2px;
+      border-radius: 9px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+
+    .segmented button {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 28px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-2);
+      font-size: 12px;
+      font-weight: 550;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .segmented button svg.icon {
+      width: 13px;
+      height: 13px;
+    }
+
+    .segmented button:hover {
+      color: var(--text);
+    }
+
+    .segmented button.selected {
+      background: var(--surface-3);
+      color: var(--text);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Backgrounds */
+    .bg-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .bg-option {
+      aspect-ratio: 1;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .bg-option:hover {
+      transform: scale(1.07);
+    }
+
+    .bg-option.selected {
+      box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent-strong);
+    }
+
+    .bg-image-panel {
+      margin-top: 12px;
+    }
+
+    .image-drop {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      height: 108px;
+      border: 1.5px dashed var(--border-strong);
+      border-radius: 10px;
+      background: var(--surface-2) center / cover no-repeat;
+      color: var(--text-2);
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .image-drop:hover {
+      border-color: var(--accent);
+      color: var(--accent-strong);
+    }
+
+    .image-drop svg.icon {
+      width: 20px;
+      height: 20px;
+    }
+
+    .image-drop.has-image {
+      border-style: solid;
+      color: transparent;
+    }
+
+    .image-drop.has-image:hover {
+      color: #fff;
+      box-shadow: inset 0 0 0 200px rgba(0, 0, 0, 0.45);
+    }
+
+    /* Setting rows + toggles */
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 0;
+    }
+
+    .setting-label {
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      flex-shrink: 0;
+      width: 38px;
+      height: 22px;
+    }
+
+    .toggle-switch input {
+      position: absolute;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      cursor: pointer;
+      z-index: 1;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      border-radius: 22px;
+      background: var(--surface-3);
+      border: 1px solid var(--border-strong);
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--text-3);
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+      background: #fff;
+    }
+
+    .toggle-switch input:focus-visible + .toggle-slider {
+      outline: 2px solid var(--accent-strong);
+      outline-offset: 2px;
+    }
+
+    /* Click colours */
+    .color-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .color-option {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .color-option:hover {
+      transform: scale(1.12);
+    }
+
+    .color-option.selected {
+      box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text);
+    }
+
+    .custom-color {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 4px 4px 4px 4px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--bg);
+    }
+
+    .custom-color input[type="color"] {
+      width: 30px;
+      height: 28px;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      cursor: pointer;
+    }
+
+    .custom-color input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    .custom-color input[type="color"]::-webkit-color-swatch {
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+    }
+
+    .custom-color input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .custom-color label {
+      padding-right: 8px;
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    /* ========== MODAL ========== */
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+      position: relative;
+      width: 100%;
+      max-width: 440px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+      animation: modalIn 0.18s ease-out;
+    }
+
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.97) translateY(-6px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-header h2 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 650;
+    }
+
+    .modal-header h2 svg.icon {
+      color: var(--accent-strong);
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .export-option + .export-option {
+      margin-top: 16px;
+    }
+
+    .export-label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 12px;
+      font-weight: 550;
+      color: var(--text-2);
+    }
+
+    .export-select {
+      width: 100%;
+      height: 38px;
+      padding: 0 34px 0 12px;
+      appearance: none;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a0a8b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .export-select:focus {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .export-select:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .export-info {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      color: var(--text-2);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .export-info svg.icon {
+      margin-top: 1px;
+      color: var(--text-3);
+    }
+
+    .export-progress {
+      margin-top: 18px;
+    }
+
+    .progress-bar {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--surface-3);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+      transition: width 0.25s ease-out;
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-2);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ========== LOADING + TOAST ========== */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: var(--bg);
+    }
+
+    .loading-overlay img {
+      width: 48px;
+      height: 48px;
+    }
+
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid var(--surface-3);
+      border-top-color: var(--accent-strong);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .btn .spinner {
+      width: 14px;
+      height: 14px;
+      border-width: 2px;
+      border-color: rgba(3, 20, 13, 0.25);
+      border-top-color: #03140d;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: var(--text-2);
+      font-size: 14px;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      z-index: 1200;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      max-width: min(520px, calc(100vw - 32px));
+      padding: 12px 14px;
+      transform: translateX(-50%);
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      background: var(--surface-2);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+      line-height: 1.45;
+      white-space: pre-line;
+      animation: modalIn 0.18s ease-out;
+    }
+
+    .toast svg.icon {
+      margin-top: 2px;
+    }
+
+    .toast.error svg.icon {
+      color: var(--danger);
+    }
+
+    .toast.success svg.icon {
+      color: var(--accent-strong);
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-strong);
+      border-radius: 4px;
+    }
+
+    @media (max-width: 900px) {
+      .app {
+        grid-template-columns: 1fr 280px;
+      }
+
+      .recording-meta,
+      .shortcut-hints {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body class="no-video">
+  <!-- Icon sprite (Lucide-style, 24px grid, stroke-based) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+    <symbol id="i-skip-back" viewBox="0 0 24 24"><path d="M19 20 9 12l10-8v16z"/><path d="M5 19V5"/></symbol>
+    <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><path d="m16 13 5.2 3.5a.5.5 0 0 0 .8-.4V7.9a.5.5 0 0 0-.8-.4L16 11"/><rect x="2" y="6" width="14" height="12" rx="2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 7.5h4M3 12h18M3 16.5h4M17 7.5h4M17 16.5h4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-ratio" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9v2M6 9h2M18 15v-2M18 15h-2"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.5 5.56-5.55C21.97 6.01 17.46 2 12 2z"/></symbol>
+    <symbol id="i-window" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M6 6.5h.01M9 6.5h.01"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></symbol>
+    <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M14 4.1 12 6M5.1 8l-2.9-.8M6 12l-1.9 2M7.2 2.2 8 5.1"/><path d="M9.04 9.9a.5.5 0 0 1 .64-.64l11 4.4a.5.5 0 0 1-.07.95l-4.23 1.1a2 2 0 0 0-1.43 1.43l-1.1 4.22a.5.5 0 0 1-.94.08z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+    <symbol id="i-gradient" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15 15 3M9 21 21 9"/></symbol>
+    <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+  </svg>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <img src="icons/icon128.png" alt="">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText">Loading your recording…</div>
+  </div>
+
+  <div class="app">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="brand">
+        <img src="icons/icon48.png" alt="">
+        Cursorfly
+      </div>
+      <div class="topbar-divider"></div>
+      <div class="recording-meta hidden" id="recordingMeta">
+        <span class="meta-chip"><svg class="icon"><use href="#i-film"/></svg><span id="metaResolution">—</span></span>
+        <span class="meta-chip"><svg class="icon"><use href="#i-clock"/></svg><span id="metaDuration">—</span></span>
+        <span class="meta-chip" id="metaClicksChip"><svg class="icon"><use href="#i-pointer"/></svg><span id="metaClicks">0 clicks</span></span>
+      </div>
+      <div class="topbar-actions">
+        <button id="newRecordingBtnTop" class="btn btn-ghost" title="Start a new recording">
+          <svg class="icon"><use href="#i-video"/></svg>New recording
+        </button>
+        <button id="loadVideoBtnTop" class="btn btn-ghost" title="Open a video file from your computer">
+          <svg class="icon"><use href="#i-folder"/></svg>Open file
+        </button>
+        <button id="exportBtn" class="btn btn-primary" disabled>
+          <svg class="icon"><use href="#i-download"/></svg>Export
+        </button>
+      </div>
+    </header>
+
+    <!-- Preview -->
+    <main class="preview-area" id="previewArea">
+      <div id="emptyState" class="empty-state hidden">
+        <div class="empty-state-icon"><svg class="icon"><use href="#i-film"/></svg></div>
+        <h2>No recording loaded</h2>
+        <p>Record your screen to get automatic click-aware zoom, or open an existing video file to style and export it.</p>
+        <div class="load-buttons">
+          <button id="newRecordingBtn" class="btn btn-primary"><svg class="icon"><use href="#i-video"/></svg>New recording</button>
+          <button id="loadVideoBtn" class="btn btn-ghost"><svg class="icon"><use href="#i-folder"/></svg>Open file</button>
         </div>
-        <div
-          class="timeline"
-          id="timeline"
-          tabindex="0"
-          role="slider"
-          aria-label="Playback position"
-          aria-valuemin="0"
-          aria-valuenow="0"
-        >
+      </div>
+
+      <div id="videoFrame" class="video-frame hidden">
+        <div class="video-background" id="videoBackground"></div>
+        <div class="video-window" id="videoWindow">
+          <video id="video" playsinline></video>
+          <canvas id="previewCanvas"></canvas>
+        </div>
+      </div>
+    </main>
+
+    <!-- Timeline -->
+    <section class="timeline-panel" aria-label="Timeline">
+      <div class="transport">
+        <div class="transport-left">
+          <button id="jumpStartBtn" class="icon-btn" title="Jump to trim start (Home)">
+            <svg class="icon"><use href="#i-skip-back"/></svg>
+          </button>
+          <button id="playBtn" class="play-btn" title="Play / Pause (Space)" aria-label="Play">
+            <svg class="icon"><use href="#i-play"/></svg>
+          </button>
+          <div class="time-readout">
+            <span id="currentTime">00:00.00</span><span class="sep">/</span><span class="total" id="totalTime">00:00.00</span>
+          </div>
+        </div>
+        <div class="transport-right">
+          <span class="chip chip-trim" title="Trimmed range">
+            <svg class="icon"><use href="#i-scissors"/></svg><span id="trimRangeText">Full clip</span>
+          </span>
+          <button id="resetTimelineBtn" class="btn btn-ghost btn-sm" title="Reset trim">
+            <svg class="icon"><use href="#i-reset"/></svg>Reset
+          </button>
+          <div class="transport-divider"></div>
+          <span class="chip chip-zoom" id="zoomCountBadge">
+            <svg class="icon"><use href="#i-zoom"/></svg><span id="zoomCountText">0 zooms</span>
+          </span>
+          <button id="addZoomBtn" class="btn btn-ghost btn-sm" title="Add a zoom at the playhead">
+            <svg class="icon"><use href="#i-plus"/></svg>Zoom
+          </button>
+          <button id="deleteZoomBtn" class="icon-btn" title="Delete selected zoom (Delete)" disabled>
+            <svg class="icon"><use href="#i-trash"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="timeline" id="timeline">
+        <div class="time-ruler" id="timeMarkers"></div>
+        <div class="track" id="timelineTrack">
           <div class="filmstrip" id="filmstrip"></div>
-          <div class="trim-dim trim-dim-left" id="trimDimLeft"></div>
-          <div class="trim-dim trim-dim-right" id="trimDimRight"></div>
-          <div class="cut-regions" id="cutRegions"></div>
-          <div class="pending-cut-marker" id="pendingCutMarker" hidden></div>
-          <div
-            class="handle handle-start"
-            id="handleStart"
-            tabindex="0"
-            role="slider"
-            aria-label="Trim start"
-            aria-valuemin="0"
-            aria-valuenow="0"
-          ></div>
-          <div
-            class="handle handle-end"
-            id="handleEnd"
-            tabindex="0"
-            role="slider"
-            aria-label="Trim end"
-            aria-valuemin="0"
-            aria-valuenow="0"
-          ></div>
-          <div class="playhead" id="playhead"></div>
+          <div class="zoom-layer" id="zoomSegmentsLayer"></div>
+          <div class="trim-shade trim-shade-left" id="trimmedLeft"></div>
+          <div class="trim-shade trim-shade-right" id="trimmedRight"></div>
+          <div class="trim-window" id="trimWindow">
+            <div class="trim-handle trim-handle-left" id="trimStartHandle" title="Drag to trim start"></div>
+            <div class="trim-handle trim-handle-right" id="trimEndHandle" title="Drag to trim end"></div>
+          </div>
         </div>
-        <div class="zoom-warning" id="zoomWarning" hidden>
-          No cursor data was captured for this recording (you didn't share
-          "This Tab"), so auto zoom &amp; click effects are unavailable —
-          everything else still works.
-        </div>
+        <div class="playhead" id="playhead"></div>
       </div>
 
-      <div class="controls-pane">
-        <fieldset>
-          <legend>Zoom &amp; pan</legend>
-          <label class="range-label">
-            Depth: <span id="zoomDepthValue">1.8x</span>
-            <input type="range" id="zoomDepthRange" min="1" max="3" step="0.1" value="1.8" />
-          </label>
-        </fieldset>
+      <div class="shortcut-hints">
+        <span><kbd>Space</kbd>Play / pause</span>
+        <span><kbd>←</kbd><kbd>→</kbd>Seek 1s</span>
+        <span><kbd>Shift</kbd>+ arrows Seek 5s</span>
+        <span><kbd>Home</kbd><kbd>End</kbd>Trim edges</span>
+        <span><kbd>Del</kbd>Remove zoom</span>
+        <span><kbd>Ctrl</kbd><kbd>Z</kbd>Undo</span>
+      </div>
+    </section>
 
-        <fieldset>
-          <legend>Background</legend>
-          <div class="swatches" id="bgSwatches"></div>
-          <label class="file-label">
-            Upload image
-            <input type="file" id="bgUpload" accept="image/*" />
-          </label>
-          <label class="range-label">
-            Padding: <span id="paddingValue">6%</span>
-            <input type="range" id="paddingRange" min="0" max="15" step="1" value="6" />
-          </label>
-        </fieldset>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-scroll">
+        <!-- Aspect ratio -->
+        <section class="panel-section">
+          <h3 class="section-title"><svg class="icon"><use href="#i-ratio"/></svg>Aspect ratio <span class="badge-beta">BETA</span></h3>
+          <div class="ratio-grid" id="aspectGroup">
+            <button class="ratio-option" data-value="native"><span class="ratio-shape native"></span>Native</button>
+            <button class="ratio-option" data-value="16:9"><span class="ratio-shape" style="aspect-ratio:16/9"></span>16:9</button>
+            <button class="ratio-option" data-value="21:9"><span class="ratio-shape" style="aspect-ratio:21/9"></span>21:9</button>
+            <button class="ratio-option" data-value="16:10"><span class="ratio-shape" style="aspect-ratio:16/10"></span>16:10</button>
+            <button class="ratio-option" data-value="3:2"><span class="ratio-shape" style="aspect-ratio:3/2"></span>3:2</button>
+            <button class="ratio-option" data-value="4:3"><span class="ratio-shape" style="aspect-ratio:4/3"></span>4:3</button>
+            <button class="ratio-option" data-value="1:1"><span class="ratio-shape" style="aspect-ratio:1/1"></span>1:1</button>
+            <button class="ratio-option" data-value="3:4"><span class="ratio-shape" style="aspect-ratio:3/4"></span>3:4</button>
+            <button class="ratio-option" data-value="9:16"><span class="ratio-shape" style="aspect-ratio:9/16"></span>9:16</button>
+          </div>
+        </section>
 
-        <fieldset>
-          <legend>Browser frame</legend>
-          <label class="checkbox-label">
-            <input type="checkbox" id="browserFrameToggle" />
-            <span>Show fake browser title bar</span>
-          </label>
-        </fieldset>
+        <!-- Background -->
+        <section class="panel-section">
+          <h3 class="section-title"><svg class="icon"><use href="#i-palette"/></svg>Background</h3>
+          <div class="segmented" id="bgTypeGroup">
+            <button data-value="gradient"><svg class="icon"><use href="#i-gradient"/></svg>Gradient</button>
+            <button data-value="image"><svg class="icon"><use href="#i-image"/></svg>Image</button>
+            <button data-value="hidden"><svg class="icon"><use href="#i-ban"/></svg>None</button>
+          </div>
+          <div class="bg-grid" id="bgGrid"></div>
+          <div class="bg-image-panel hidden" id="bgImagePanel">
+            <button class="image-drop" id="bgImageDrop">
+              <svg class="icon"><use href="#i-image"/></svg>
+              <span id="bgImageDropText">Choose an image</span>
+            </button>
+          </div>
+        </section>
 
-        <fieldset>
-          <legend>Click effects</legend>
-          <label class="checkbox-label">
-            <input type="checkbox" id="clickEffectsToggle" checked />
-            <span>Show orb on click</span>
-          </label>
-          <label class="range-label">
-            Color
-            <input type="color" id="clickColor" value="#667eea" />
-          </label>
-          <label class="range-label">
-            Intensity: <span id="intensityValue">60%</span>
-            <input type="range" id="intensityRange" min="10" max="100" step="5" value="60" />
-          </label>
-        </fieldset>
+        <!-- Frame -->
+        <section class="panel-section">
+          <h3 class="section-title"><svg class="icon"><use href="#i-window"/></svg>Frame</h3>
+          <div class="setting-row">
+            <span class="setting-label">Show browser UI</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="showBrowserFrame" aria-label="Show browser UI">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="field-hint">Turn off to crop the tab strip and address bar from the top of the recording.</div>
+          <div class="setting-row" style="margin-top: 6px;">
+            <span class="setting-label">Drop shadow</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="showShadow" aria-label="Drop shadow">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </section>
 
-        <fieldset id="webcamFieldset">
-          <legend>Webcam overlay</legend>
-          <label class="checkbox-label">
-            <input type="checkbox" id="webcamToggle" checked />
-            <span>Show webcam picture-in-picture</span>
-          </label>
-          <label class="range-label">
-            Corner
-            <select id="webcamCorner">
-              <option value="br">Bottom right</option>
-              <option value="bl">Bottom left</option>
-              <option value="tr">Top right</option>
-              <option value="tl">Top left</option>
-            </select>
-          </label>
-          <label class="range-label">
-            Size: <span id="webcamSizeValue">22%</span>
-            <input type="range" id="webcamSizeRange" min="12" max="35" step="1" value="22" />
-          </label>
-          <label class="range-label">
-            Background (like Meet/Zoom)
-            <select id="webcamBgMode">
-              <option value="none">None — show my real background</option>
-              <option value="blur">Blur my background</option>
-              <option value="image">Replace with an image</option>
-            </select>
-          </label>
-          <label class="range-label" id="webcamBlurRow" hidden>
-            Blur strength: <span id="webcamBlurValue">14px</span>
-            <input type="range" id="webcamBlurRange" min="4" max="30" step="1" value="14" />
-          </label>
-          <label class="file-label" id="webcamBgUploadRow" hidden>
-            Background image
-            <input type="file" id="webcamBgUpload" accept="image/*" />
-          </label>
-          <div class="sub" id="webcamBgStatus" hidden></div>
-        </fieldset>
+        <!-- Zoom -->
+        <section class="panel-section">
+          <h3 class="section-title"><svg class="icon"><use href="#i-zoom"/></svg>Auto zoom</h3>
+          <div class="setting-row">
+            <span class="setting-label">Apply zoom</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="applyZoom" aria-label="Apply zoom">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="field-label">Depth</div>
+          <div class="segmented" id="zoomDepthGroup">
+            <button data-value="shallow" title="Shallow">1.1×</button>
+            <button data-value="moderate" title="Moderate">1.3×</button>
+            <button data-value="deep" title="Deep">1.5×</button>
+            <button data-value="maximum" title="Maximum">2×</button>
+          </div>
+          <div class="field-hint">Changing depth regenerates zooms from your clicks.</div>
+        </section>
 
-        <fieldset>
-          <legend>Output</legend>
-          <label class="range-label">
-            Resolution
-            <select id="outputResolution">
-              <option value="720">720p</option>
-              <option value="1080" selected>1080p</option>
-              <option value="1440">1440p</option>
-              <option value="2160">4K</option>
-            </select>
-          </label>
-          <label class="range-label">
-            Frame rate
-            <select id="outputFps">
-              <option value="30" selected>30 fps</option>
-              <option value="60">60 fps</option>
-            </select>
-          </label>
-          <label class="range-label">
-            Bitrate: <span id="bitrateValue">8 Mbps</span>
-            <input type="range" id="bitrateRange" min="2" max="40" step="1" value="8" />
-          </label>
-        </fieldset>
+        <!-- Click effects -->
+        <section class="panel-section">
+          <h3 class="section-title"><svg class="icon"><use href="#i-pointer"/></svg>Click highlight</h3>
+          <div class="setting-row">
+            <span class="setting-label">Show on clicks</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="clickEnabled" aria-label="Show click highlight">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="field-label">Color</div>
+          <div class="color-grid" id="colorGroup"></div>
+          <div class="custom-color">
+            <input type="color" id="customColorPicker" value="#ffffff" aria-label="Custom click color">
+            <input type="text" id="hexColorInput" value="#ffffff" maxlength="7" spellcheck="false" aria-label="Hex color">
+            <label for="hexColorInput">HEX</label>
+          </div>
+          <div class="field-label">Intensity</div>
+          <div class="segmented" id="clickForceGroup">
+            <button data-value="weak">Subtle</button>
+            <button data-value="moderate">Normal</button>
+            <button data-value="strong">Strong</button>
+          </div>
+        </section>
+      </div>
+    </aside>
+  </div>
 
-        <div class="export-row">
-          <button class="btn btn-primary" id="exportBtn">Export video</button>
-          <div class="export-status" id="exportStatus"></div>
+  <!-- Export Modal -->
+  <div id="exportModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="exportTitle"><svg class="icon"><use href="#i-download"/></svg>Export video</h2>
+        <button class="icon-btn" id="closeExportModal" aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="export-option">
+          <label class="export-label" for="exportResolution">Resolution</label>
+          <select id="exportResolution" class="export-select">
+            <option value="original">Original</option>
+            <option value="4k">4K (3840×2160) · Beta</option>
+            <option value="1440p">1440p (2560×1440)</option>
+            <option value="1080p" selected>1080p (1920×1080)</option>
+            <option value="720p">720p (1280×720)</option>
+            <option value="480p">480p (854×480)</option>
+          </select>
         </div>
+        <div class="export-option">
+          <label class="export-label" for="exportFormat">Format</label>
+          <select id="exportFormat" class="export-select">
+            <option value="mp4" selected>MP4 (H.264)</option>
+            <option value="webm">WebM (VP9)</option>
+          </select>
+        </div>
+        <div class="export-option">
+          <label class="export-label" for="exportQuality">Quality</label>
+          <select id="exportQuality" class="export-select">
+            <option value="high" selected>High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low (smaller file)</option>
+          </select>
+        </div>
+
+        <div class="export-info" id="exportInfo">
+          <svg class="icon"><use href="#i-info"/></svg>
+          <span>Export renders in real time. Keep your device plugged in and this tab visible until it finishes. 4K upscaling is in beta.</span>
+        </div>
+
+        <div class="export-progress hidden" id="exportProgress">
+          <div class="progress-bar"><div class="progress-fill" id="exportProgressFill"></div></div>
+          <div class="progress-meta">
+            <span id="exportStatus">Preparing…</span>
+            <span id="exportPercent">0%</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="cancelExport">Cancel</button>
+        <button class="btn btn-primary" id="confirmExport"></button>
       </div>
     </div>
+  </div>
 
-    <div id="resultOverlay" class="center-state" hidden>
-      <h1>Export ready</h1>
-      <video id="resultVideo" controls></video>
-      <div class="actions">
-        <a class="btn btn-primary" id="downloadLink" download>Download video</a>
-        <button class="btn btn-secondary" id="backToEditBtn">Back to editor</button>
-      </div>
-    </div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-    <div class="hidden-media" id="mediaSinks"></div>
-
-    <script type="module" src="webcam-segmenter.js"></script>
-    <script src="db.js"></script>
-    <script src="zoom-analyzer.js"></script>
-    <script src="video-processor.js"></script>
-    <script src="editor.js"></script>
-  </body>
+  <script src="zoom-analyzer.js"></script>
+  <script src="video-processor.js"></script>
+  <script src="editor.js"></script>
+</body>
 </html>

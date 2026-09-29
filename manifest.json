@@ -1,29 +1,49 @@
 {
   "manifest_version": 3,
-  "name": "Open Motion — Screen & Webcam Recorder",
-  "version": "0.1.0",
-  "description": "Record your screen with an optional webcam overlay for demo videos. 100% local, no server, no sign-up.",
-  "permissions": ["storage", "activeTab", "scripting", "tabs", "tabCapture"],
-  "host_permissions": ["<all_urls>"],
+  "name": "Cursorfly - Open Source Screen Recorder with Auto Zoom",
+  "version": "1.4.0",
+  "description": "Free & open-source screen recorder. Create beautiful recordings with automatic cinematic zoom & pan — 100% offline, no sign-up.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "desktopCapture",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   },
-  "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self';"
-  },
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
-      "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
-    }
+    },
+    "default_title": "Cursorfly - Open Source Screen Recorder with Auto Zoom"
   },
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "record.html",
+        "record.js",
+        "editor.html",
+        "editor.js",
+        "zoom-analyzer.js",
+        "video-processor.js",
+        "recorder.js",
+        "content.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "minimum_chrome_version": "102"
 }
