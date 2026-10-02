@@ -70,6 +70,28 @@
       align-items: start;
     }
 
+    /* Legal links */
+    .legal-footer {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 40px 40px;
+      display: flex;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--faint);
+    }
+
+    .legal-footer a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .legal-footer a:hover,
+    .legal-footer a:focus-visible {
+      color: var(--text);
+      text-decoration: underline;
+    }
+
     /* Intro column */
     .header {
       position: sticky;
@@ -663,6 +685,14 @@
       </ol>
     </main>
   </div>
+
+  <footer class="legal-footer">
+    <a href="https://github.com/NikhilKumarMandal/open-motion/blob/main/PRIVACY_POLICY.md" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+    <span aria-hidden="true">·</span>
+    <a href="https://github.com/NikhilKumarMandal/open-motion/blob/main/TERMS_OF_SERVICE.md" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+    <span aria-hidden="true">·</span>
+    <a href="mailto:kumarnikhil48578@gmail.com">Help</a>
+  </footer>
 
   <!-- Recording Overlay -->
   <div id="recordingOverlay" class="recording-overlay">

@@ -82,6 +82,8 @@ Requires Chrome **102** or newer.
 
 Open-Motions does not collect, transmit or store any data outside your browser. Recordings and cursor data stay on your machine until you export them.
 
+See the full [Privacy Policy](PRIVACY_POLICY.md) and [Terms of Service](TERMS_OF_SERVICE.md).
+
 ## Contributing
 
 Contributions are welcome! To get started:
@@ -91,7 +93,7 @@ Contributions are welcome! To get started:
 3. Reload the extension from `chrome://extensions` to test.
 4. Open a pull request describing what you changed and why.
 
-Please report bugs and feature ideas through the issue tracker.
+Please report bugs and feature ideas through the issue tracker. For anything else, or if you need help, email [kumarnikhil48578@gmail.com](mailto:kumarnikhil48578@gmail.com).
 
 ## License
 
