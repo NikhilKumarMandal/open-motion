@@ -118,6 +118,7 @@ const settings = {
   customClickColor: '#ffffff',    // Effective hex colour
   clickForce: 'moderate',
   showBrowserFrame: true,         // false = auto-crop browser UI from the top
+  showTaskbar: true,              // false = auto-crop the OS taskbar / Dock from the bottom
   showShadow: true
 };
 
@@ -185,12 +186,32 @@ function getBrowserUIHeight() {
   return Math.min(105, Math.floor(videoHeight * 0.08) + 5);
 }
 
+const platformName = (() => {
+  const p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+  if (/mac/i.test(p)) return 'mac';
+  if (/win/i.test(p)) return 'windows';
+  return 'other';
+})();
+
+// Height of the Windows taskbar / macOS Dock in video pixels, for "hide taskbar".
+// Measured from this display (screen minus usable area), scaled to the recording;
+// falls back to a typical size when the taskbar/Dock auto-hides.
+function getTaskbarHeight() {
+  const screenH = window.screen.height || videoHeight;
+  const measured = screenH - window.screen.availHeight - (window.screen.availTop || 0);
+  const fallback = platformName === 'mac' ? 70 : 48;
+  const cssPx = measured > 0 && measured < screenH * 0.2 ? measured : fallback;
+  return Math.min(Math.round(cssPx * (videoHeight / screenH)), Math.floor(videoHeight * 0.2));
+}
+
+function getBottomCrop() {
+  return settings.showTaskbar ? 0 : getTaskbarHeight();
+}
+
 function getSourceRect() {
-  if (settings.showBrowserFrame) {
-    return { x: 0, y: 0, width: videoWidth, height: videoHeight };
-  }
-  const uiHeight = getBrowserUIHeight();
-  return { x: 0, y: uiHeight, width: videoWidth, height: videoHeight - uiHeight };
+  const top = settings.showBrowserFrame ? 0 : getBrowserUIHeight();
+  const bottom = getBottomCrop();
+  return { x: 0, y: top, width: videoWidth, height: Math.max(1, videoHeight - top - bottom) };
 }
 
 function getActiveBackgroundImage() {
@@ -565,6 +586,7 @@ function syncSettingsUI() {
   setChoice('colorGroup', settings.clickColor);
   setChoice('bgGrid', lastGradient);
   $('showBrowserFrame').checked = settings.showBrowserFrame;
+  $('showTaskbar').checked = settings.showTaskbar;
   $('showShadow').checked = settings.showShadow;
   $('applyZoom').checked = settings.applyZoom;
   $('clickEnabled').checked = settings.clickStyle !== 'none';
@@ -642,6 +664,11 @@ function setupEventListeners() {
   // Frame
   $('showBrowserFrame').addEventListener('change', (e) => {
     settings.showBrowserFrame = e.target.checked;
+    updateFrameSize();
+  });
+
+  $('showTaskbar').addEventListener('change', (e) => {
+    settings.showTaskbar = e.target.checked;
     updateFrameSize();
   });
 
@@ -947,7 +974,10 @@ function drawClickEffects() {
   const previewBeforeMs = 120; // Show orb 120ms before click
   const durationAfterMs = 250; // ...and 250ms after
   const totalWindow = previewBeforeMs + durationAfterMs;
-  const uiHeight = getBrowserUIHeight();
+  // Page viewport in video pixels: below the browser UI, above the taskbar when one is cropped
+  const source = getSourceRect();
+  const viewportTop = getBrowserUIHeight();
+  const viewportHeight = videoHeight - viewportTop - getBottomCrop();
 
   for (const click of clickEvents) {
     const timeFromClick = timestamp - click.timestamp;
@@ -967,9 +997,7 @@ function drawClickEffects() {
     }
 
     const x = normX * canvas.width;
-    const y = settings.showBrowserFrame
-      ? ((uiHeight + normY * (videoHeight - uiHeight)) / videoHeight) * canvas.height
-      : normY * canvas.height;
+    const y = ((viewportTop + normY * viewportHeight - source.y) / source.height) * canvas.height;
 
     drawOrbClick(x, y, (timeFromClick + previewBeforeMs) / totalWindow);
   }
@@ -1508,6 +1536,7 @@ async function doExport() {
       webcamShape: 'circular',
       webcamFlip: false,
       showBrowserFrame: settings.showBrowserFrame,
+      taskbarCrop: getBottomCrop(),
       showShadow: settings.showShadow,
       outputWidth: width,
       outputHeight: height,

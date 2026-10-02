@@ -72,6 +72,7 @@ class VideoProcessor {
       sharpening: true,
       antiAlias: true,
       showBrowserFrame: true, // true = show browser UI, false = hide browser UI (auto-crop)
+      taskbarCrop: 0, // Pixels to crop from the bottom (OS taskbar / Dock), computed by the editor
       showShadow: true // true = show shadow effect, false = hide shadow
     };
     
@@ -806,6 +807,13 @@ class VideoProcessor {
               effectiveAspectRatio: effectiveAspectRatio.toFixed(3)
             });
           }
+
+          // Crop the OS taskbar / Dock from the bottom
+          const taskbarCrop = Math.max(0, Math.min(this.settings.taskbarCrop || 0, sourceHeight - 1));
+          if (taskbarCrop > 0) {
+            sourceHeight -= taskbarCrop;
+            effectiveAspectRatio = sourceWidth / sourceHeight;
+          }
           
           // Draw new video frame with transformations
           // Calculate aspect ratio-preserving dimensions using effective (cropped) aspect ratio
@@ -890,7 +898,7 @@ class VideoProcessor {
           
           this.ctx.filter = 'none';
           
-          this.drawClickEffects(timestamp, dx, dy, dw, dh, srcWidth, srcHeight);
+          this.drawClickEffects(timestamp, dx, dy, dw, dh, srcWidth, srcHeight, sourceY, sourceHeight);
           
           this.ctx.restore();
           
@@ -1114,7 +1122,7 @@ class VideoProcessor {
     return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
   }
 
-  drawClickEffects(timestamp, videoX, videoY, drawWidth, drawHeight, srcWidth, srcHeight) {
+  drawClickEffects(timestamp, videoX, videoY, drawWidth, drawHeight, srcWidth, srcHeight, cropY = 0, cropHeight = null) {
     if (this.settings.clickStyle === 'none' || !this.cursorData) return;
     const videoWidth = srcWidth || drawWidth;
     const videoHeight = srcHeight || drawHeight;
@@ -1123,13 +1131,10 @@ class VideoProcessor {
     const totalWindow = previewBeforeMs + durationAfterMs;
     const clicks = this.cursorData.filter(d => (d.type === 'click' || d.type === 'doubleclick') && timestamp >= d.timestamp - previewBeforeMs && timestamp < d.timestamp + durationAfterMs);
     
-    // Calculate browser UI height if cropped
-    let browserUIHeight = 0;
-    let croppedHeight = videoHeight;
-    if (!this.settings.showBrowserFrame) {
-      browserUIHeight = Math.min(105, Math.floor(videoHeight * 0.08) + 5);
-      croppedHeight = videoHeight - browserUIHeight;
-    }
+    // Page viewport in source pixels: below the browser UI, above the taskbar when one is cropped
+    const viewportTop = Math.min(105, Math.floor(videoHeight * 0.08) + 5);
+    const viewportHeight = videoHeight - viewportTop - (this.settings.taskbarCrop || 0);
+    const sourceHeight = cropHeight || videoHeight;
     
     clicks.forEach(click => {
       // Calculate progress: 0 = before click, 1 = after click
@@ -1152,22 +1157,9 @@ class VideoProcessor {
       // Normalized coordinates are relative to the viewport (content area excluding browser UI)
       // Map to output coordinates using actual draw dimensions
       // videoX, videoY is where the video is drawn, drawWidth, drawHeight is the video size on canvas
-      let x = videoX + (normX * drawWidth);
-      let y;
-      
-      if (browserUIHeight > 0) {
-        // Browser UI is cropped - drawHeight represents content area only
-        // normalizedY is relative to content area, use directly
-        y = videoY + (normY * drawHeight);
-      } else {
-        // Browser UI is shown - need to offset by browser UI height
-        const browserUIHeightActual = Math.min(105, Math.floor(videoHeight * 0.08) + 5);
-        const contentAreaHeight = videoHeight - browserUIHeightActual;
-        // normalizedY is 0-1 relative to content area, map to drawHeight proportionally
-        const browserUIHeightScaled = (browserUIHeightActual / videoHeight) * drawHeight;
-        const contentAreaHeightScaled = (contentAreaHeight / videoHeight) * drawHeight;
-        y = videoY + browserUIHeightScaled + (normY * contentAreaHeightScaled);
-      }
+      // drawHeight covers the cropped source rect (cropY .. cropY + sourceHeight)
+      const x = videoX + (normX * drawWidth);
+      const y = videoY + ((viewportTop + normY * viewportHeight - cropY) / sourceHeight) * drawHeight;
       
       // Draw orb animation (always orb when enabled)
       if (this.settings.clickStyle !== 'none') {
