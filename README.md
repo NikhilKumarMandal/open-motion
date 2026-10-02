@@ -1,8 +1,8 @@
-# Open Motion
+# Open-Motions
 
 **A free, open-source screen recorder for Chrome with automatic cinematic zoom & pan.**
 
-Open Motion records your browser tab, tracks your cursor and clicks, and turns the raw capture into a polished demo video — smoothly zooming in on the parts you interact with. Everything runs locally in your browser: no account, no uploads, no servers.
+Open-Motions records your browser tab, tracks your cursor and clicks, and turns the raw capture into a polished demo video — smoothly zooming in on the parts you interact with. Everything runs locally in your browser: no account, no uploads, no servers.
 
 ---
 
@@ -23,7 +23,7 @@ Open Motion records your browser tab, tracks your cursor and clicks, and turns t
 
 ## Installation
 
-Open Motion isn't on the Chrome Web Store yet, so install it as an unpacked extension:
+Open-Motions isn't on the Chrome Web Store yet, so install it as an unpacked extension:
 
 1. Clone or download this repository:
    ```bash
@@ -38,7 +38,7 @@ Requires Chrome **102** or newer.
 
 ## Usage
 
-1. Open the tab you want to record and click the Open Motion icon.
+1. Open the tab you want to record and click the Open-Motions icon.
 2. Choose your options (cursor tracking, audio, microphone, quality, frame rate).
 3. Click **Start Recording** and follow the on-screen steps to share the tab and, optionally, enable your camera and microphone.
 4. Use the toolbar icon to **pause** or **stop** the recording.
@@ -75,7 +75,7 @@ Requires Chrome **102** or newer.
 
 ## Privacy
 
-Open Motion does not collect, transmit or store any data outside your browser. Recordings and cursor data stay on your machine until you export them.
+Open-Motions does not collect, transmit or store any data outside your browser. Recordings and cursor data stay on your machine until you export them.
 
 ## Contributing
 

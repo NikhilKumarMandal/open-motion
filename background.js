@@ -1,5 +1,5 @@
 /**
- * CursorFly Screen Recorder
+ * Open-Motions Screen Recorder
  * Copyright (c) 2026 Anu S Pillai
  * GitHub: https://github.com/anugotta
  *
@@ -53,17 +53,17 @@ async function updateRecordingIcon(recording, paused = false) {
         // Show paused state
         await chrome.action.setBadgeText({ text: '⏸' });
         await chrome.action.setBadgeBackgroundColor({ color: '#ffa500' }); // Orange
-        await chrome.action.setTitle({ title: 'Cursorfly - Recording paused. Click to stop recording.' });
+        await chrome.action.setTitle({ title: 'Open-Motions - Recording paused. Click to stop recording.' });
       } else {
         // Show active recording
         await chrome.action.setBadgeText({ text: '●' });
         await chrome.action.setBadgeBackgroundColor({ color: '#dc3545' }); // Red
-        await chrome.action.setTitle({ title: 'Cursorfly - Recording in progress. Click to stop recording.' });
+        await chrome.action.setTitle({ title: 'Open-Motions - Recording in progress. Click to stop recording.' });
       }
     } else {
       // Clear badge and reset title
       await chrome.action.setBadgeText({ text: '' });
-      await chrome.action.setTitle({ title: 'Cursorfly - Screen Recorder with Auto Pan Zoom' });
+      await chrome.action.setTitle({ title: 'Open-Motions - Screen Recorder with Auto Pan Zoom' });
     }
   } catch (error) {
     console.warn('[Background] Could not update icon:', error);
@@ -644,7 +644,7 @@ async function handleRecordingTabUpdateForCameraOverlay(tabId, changeInfo, tab) 
     // Check if overlay already exists
     const results = await chrome.scripting.executeScript({
       target: { tabId: tabId },
-      func: () => !!document.getElementById('cursorfly-camera-overlay')
+      func: () => !!document.getElementById('open-motions-camera-overlay')
     });
     
     if (!results[0]?.result) {
@@ -678,7 +678,7 @@ function injectCameraOverlayScript() {
   try {
     
     // Check if overlay already exists
-    if (document.getElementById('cursorfly-camera-overlay')) {
+    if (document.getElementById('open-motions-camera-overlay')) {
       console.log('[CameraOverlay] Overlay already exists');
       return;
     }
@@ -692,7 +692,7 @@ function injectCameraOverlayScript() {
     
     // Create overlay container
     const overlay = document.createElement('div');
-    overlay.id = 'cursorfly-camera-overlay';
+    overlay.id = 'open-motions-camera-overlay';
     overlay.style.cssText = `
       position: fixed;
       bottom: 20px;
@@ -712,7 +712,7 @@ function injectCameraOverlayScript() {
     
     // Use an img element instead of video - we'll update it with frames from record.html
     const img = document.createElement('img');
-    img.id = 'cursorfly-camera-image';
+    img.id = 'open-motions-camera-image';
     img.style.cssText = `
       width: 100%;
       height: 100%;
@@ -797,7 +797,7 @@ function injectCameraOverlayScript() {
     // Also set up periodic requests as fallback (every 100ms) in case message listener fails
     // This ensures frames are always updated even if message listener has issues
     const frameRequestInterval = setInterval(() => {
-      const overlay = document.getElementById('cursorfly-camera-overlay');
+      const overlay = document.getElementById('open-motions-camera-overlay');
       if (overlay) {
         requestFrame();
       } else {
@@ -840,9 +840,9 @@ async function removeCameraOverlayFromTab(tabId) {
         }
         
         // Remove overlay immediately (no fade-out delay to ensure cleanup)
-        const overlay = document.getElementById('cursorfly-camera-overlay');
+        const overlay = document.getElementById('open-motions-camera-overlay');
         if (overlay) {
-          const img = document.getElementById('cursorfly-camera-image');
+          const img = document.getElementById('open-motions-camera-image');
           if (img) {
             img.src = '';
             img.onerror = null; // Remove error handler
@@ -892,9 +892,9 @@ async function removeCameraOverlayFromAllTabs() {
             }
             
             // Remove overlay immediately
-            const overlay = document.getElementById('cursorfly-camera-overlay');
+            const overlay = document.getElementById('open-motions-camera-overlay');
             if (overlay) {
-              const img = document.getElementById('cursorfly-camera-image');
+              const img = document.getElementById('open-motions-camera-image');
               if (img) {
                 img.src = '';
                 img.onerror = null;

@@ -1,5 +1,5 @@
 /**
- * CursorFly Screen Recorder
+ * Open-Motions Screen Recorder
  * Copyright (c) 2026 Anu S Pillai
  * GitHub: https://github.com/anugotta
  *
@@ -299,7 +299,7 @@ async function fetchRecordingData() {
 
 function retrieveVideoFromIndexedDB(videoId) {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('CursorflyVideoStorage', 1);
+    const request = indexedDB.open('OpenMotionsVideoStorage', 1);
 
     request.onerror = () => reject(new Error('Failed to open IndexedDB'));
     request.onupgradeneeded = (event) => {
@@ -1544,7 +1544,7 @@ async function doExport() {
     const url = URL.createObjectURL(processed);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cursorfly-${Date.now()}.${extension}`;
+    a.download = `open-motions-${Date.now()}.${extension}`;
     document.body.appendChild(a);
     a.click();
     a.remove();

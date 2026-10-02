@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Cursorfly - Open Source Screen Recorder with Auto Zoom",
+  "name": "Open-Motions - Open Source Screen Recorder with Auto Zoom",
   "version": "1.4.0",
   "description": "Free & open-source screen recorder. Create beautiful recordings with automatic cinematic zoom & pan — 100% offline, no sign-up.",
   "permissions": [
@@ -22,7 +22,7 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "Cursorfly - Open Source Screen Recorder with Auto Zoom"
+    "default_title": "Open-Motions - Open Source Screen Recorder with Auto Zoom"
   },
   "icons": {
     "16": "icons/icon16.png",

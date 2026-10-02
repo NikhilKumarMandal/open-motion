@@ -1,12 +1,12 @@
 /**
- * CursorFly Screen Recorder
+ * Open-Motions Screen Recorder
  * Copyright (c) 2026 Anu S Pillai
  * GitHub: https://github.com/anugotta
  *
  * Licensed under the MIT License.
  */
 
-// Record Page Controller - Cursorfly-style flow
+// Record Page Controller - Open-Motions flow
 // Screen picker appears on this page, then recording starts on original tab
 
 // Production mode: set to false to disable debug logging
@@ -138,7 +138,7 @@ function getWebsiteName(url) {
 function showUnsupportedModal(url) {
   const websiteName = getWebsiteName(url);
   unsupportedModalMessage.textContent = 
-    `Cursorfly - Screen Recorder with Auto Pan Zoom is not allowed to record your mouse interactions on ${websiteName} and Settings pages.`;
+    `Open-Motions - Screen Recorder with Auto Pan Zoom is not allowed to record your mouse interactions on ${websiteName} and Settings pages.`;
   unsupportedModal.classList.add('active');
 }
 
@@ -1002,7 +1002,7 @@ async function startLocalRecording() {
 // Store video in IndexedDB for large files
 async function storeVideoInIndexedDB(videoId, blob) {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('CursorflyVideoStorage', 1);
+    const request = indexedDB.open('OpenMotionsVideoStorage', 1);
     
     request.onerror = () => reject(new Error('Failed to open IndexedDB'));
     request.onsuccess = (event) => {

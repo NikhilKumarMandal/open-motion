@@ -1,5 +1,5 @@
 <!--
-  CursorFly Screen Recorder
+  Open-Motions Screen Recorder
   Copyright (c) 2026 Anu S Pillai
   GitHub: https://github.com/anugotta
 
@@ -10,11 +10,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cursorfly - Screen Recorder with Auto Pan Zoom</title>
+  <title>Open-Motions - Screen Recorder with Auto Pan Zoom</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg: #fafaf9;
+      --text: #111111;
+      --muted: #6f6f6b;
+      --faint: #a3a3a0;
+      --line: #e7e6e3;
+      --surface: #ffffff;
+      --btn-bg: #111111;
+      --btn-text: #ffffff;
+      --rec: #e5484d;
+      --ok: #2f9e5b;
+      --mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e0e0e;
+        --text: #ededed;
+        --muted: #9b9b97;
+        --faint: #5c5c59;
+        --line: #232322;
+        --surface: #161616;
+        --btn-bg: #ededed;
+        --btn-text: #0e0e0e;
+        --ok: #4cc27c;
+      }
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -22,310 +50,182 @@
     }
 
     body {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(180deg, #f0fdf4 0%, #ecfdf5 50%, #d1fae5 100%);
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
-      color: #1f2937;
+      -webkit-font-smoothing: antialiased;
+      font-size: 15px;
+      line-height: 1.55;
     }
 
-    /* Header */
+    /* Layout */
+    .page {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 72px 40px;
+      display: grid;
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+      gap: 80px;
+      align-items: start;
+    }
+
+    /* Intro column */
     .header {
-      text-align: center;
-      padding: 48px 24px 32px;
+      position: sticky;
+      top: 72px;
     }
 
     .brand {
-      color: #10b981;
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      margin-bottom: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 40px;
+    }
+
+    .brand::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--rec);
     }
 
     .title {
-      font-size: 42px;
-      font-weight: 700;
-      color: #111827;
-      letter-spacing: -1px;
-      line-height: 1.2;
+      font-size: 44px;
+      font-weight: 500;
+      letter-spacing: -0.035em;
+      line-height: 1.05;
     }
 
-    /* Main content */
-    .container {
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 0 24px 48px;
+    .subtitle {
+      margin-top: 20px;
+      color: var(--muted);
+      max-width: 340px;
     }
 
-    /* Steps card */
+    /* Steps */
     .steps-card {
-      background: rgba(255, 255, 255, 0.8);
-      backdrop-filter: blur(20px);
-      border-radius: 24px;
-      padding: 40px;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.8);
+      list-style: none;
+      border-top: 1px solid var(--line);
     }
 
     .step {
-      display: flex;
-      gap: 24px;
-      padding: 28px 0;
-      border-bottom: 1px solid #e5e7eb;
-    }
-
-    .step:last-child {
-      border-bottom: none;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      padding: 32px 0;
+      border-bottom: 1px solid var(--line);
     }
 
     .step-number {
-      width: 48px;
-      height: 48px;
-      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      font-weight: 700;
-      color: #10b981;
-      flex-shrink: 0;
-      border: 2px solid #a7f3d0;
-    }
-
-    .step-content {
-      flex: 1;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--faint);
+      padding-top: 2px;
     }
 
     .step-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #111827;
+      font-size: 17px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
       margin-bottom: 6px;
     }
 
+    .step-tag {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--faint);
+      margin-left: 8px;
+    }
+
     .step-description {
+      color: var(--muted);
+      margin-bottom: 20px;
+      max-width: 520px;
+    }
+
+    .step-description:last-child {
+      margin-bottom: 0;
+    }
+
+    .step-description strong,
+    .note strong {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .note {
+      margin: 0 0 20px;
+      padding-left: 14px;
+      border-left: 2px solid var(--line);
+      color: var(--muted);
       font-size: 14px;
-      color: #6b7280;
-      line-height: 1.6;
-      margin-bottom: 16px;
+      max-width: 520px;
+    }
+
+    .note p + p {
+      margin-top: 8px;
     }
 
     /* Buttons */
     .btn {
       display: inline-flex;
       align-items: center;
-      gap: 10px;
-      padding: 14px 24px;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      border: none;
+      justify-content: center;
+      gap: 8px;
+      height: 40px;
+      padding: 0 18px;
+      border-radius: 8px;
       font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    }
+
+    /* Emoji icons are set from record.js; keep the buttons text-only */
+    .btn-icon {
+      display: none;
     }
 
     .btn-primary {
-      background: #10b981;
-      color: white;
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      background: var(--btn-bg);
+      color: var(--btn-text);
     }
 
     .btn-primary:hover:not(:disabled) {
-      background: #059669;
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+      opacity: 0.85;
     }
 
     .btn-outline {
-      background: white;
-      color: #10b981;
-      border: 2px solid #10b981;
+      background: var(--surface);
+      color: var(--text);
+      border-color: var(--line);
     }
 
     .btn-outline:hover:not(:disabled) {
-      background: #ecfdf5;
+      border-color: var(--faint);
+    }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--text);
+      outline-offset: 2px;
     }
 
     .btn:disabled {
-      opacity: 0.5;
+      opacity: 0.4;
       cursor: not-allowed;
-      transform: none !important;
-    }
-
-    .btn-icon {
-      width: 20px;
-      height: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
     .media-buttons {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
-      margin-top: 8px;
-    }
-
-    .media-buttons .btn {
-      flex: 1;
-      min-width: 200px;
-      justify-content: center;
-    }
-
-    /* Tip box */
-    .tip-box {
-      margin-top: 32px;
-      padding: 20px 24px;
-      background: rgba(255, 255, 255, 0.6);
-      border-radius: 16px;
-      border: 1px solid #e5e7eb;
-    }
-
-    .tip-box p {
-      font-size: 14px;
-      color: #6b7280;
-      line-height: 1.6;
-    }
-
-    .tip-box strong {
-      color: #374151;
-    }
-
-    .tip-box a {
-      color: #10b981;
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    .tip-box a:hover {
-      text-decoration: underline;
-    }
-
-    /* Footer */
-    .footer {
-      max-width: 1200px;
-      margin: 48px auto 0;
-      padding: 32px 24px;
-      border-top: 1px solid #d1d5db;
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 32px;
-    }
-
-    .footer-brand {
-      color: #10b981;
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 12px;
-    }
-
-    .footer-description {
-      font-size: 13px;
-      color: #6b7280;
-      line-height: 1.6;
-      margin-bottom: 12px;
-    }
-
-    .footer-copyright {
-      font-size: 12px;
-      color: #9ca3af;
-    }
-
-    .footer-column h4 {
-      font-size: 13px;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 12px;
-    }
-
-    .footer-column ul {
-      list-style: none;
-    }
-
-    .footer-column li {
-      margin-bottom: 8px;
-    }
-
-    .footer-column a {
-      font-size: 13px;
-      color: #6b7280;
-      text-decoration: none;
-      transition: color 0.2s;
-    }
-
-    .footer-column a:hover {
-      color: #10b981;
-    }
-
-    /* Recording state */
-    .recording-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.8);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .recording-overlay.active {
-      display: flex;
-    }
-
-    .recording-card {
-      background: white;
-      border-radius: 24px;
-      padding: 48px;
-      text-align: center;
-      max-width: 400px;
-    }
-
-    .recording-timer {
-      font-size: 72px;
-      font-weight: 700;
-      color: #ef4444;
-      font-family: 'DM Sans', monospace;
-      letter-spacing: 4px;
-      margin: 24px 0;
-    }
-
-    .recording-dot {
-      width: 16px;
-      height: 16px;
-      background: #ef4444;
-      border-radius: 50%;
-      display: inline-block;
-      margin-right: 8px;
-      animation: pulse 1.5s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(1.2); }
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .title {
-        font-size: 28px;
-      }
-
-      .step {
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .footer {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .hidden {
-      display: none !important;
+      gap: 8px;
     }
 
     /* Status indicator */
@@ -333,21 +233,147 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 16px;
-      background: #dbeafe;
-      border: 1px solid #93c5fd;
-      border-radius: 8px;
+      margin-top: 14px;
+      margin-left: 14px;
       font-size: 13px;
-      color: #1d4ed8;
-      font-weight: 500;
-      margin-top: 12px;
+      color: var(--ok);
+      vertical-align: middle;
+    }
+
+    .media-buttons + .status-badge {
+      margin-left: 0;
+      display: flex;
     }
 
     .status-badge .dot {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: currentColor;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Recording state: full-screen view in the page's own style */
+    .recording-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: var(--bg);
+      color: var(--text);
+      animation: fade-in 0.2s ease-out;
+    }
+
+    .recording-overlay.active {
+      display: block;
+    }
+
+    .recording-card {
+      max-width: 1080px;
+      height: 100%;
+      margin: 0 auto;
+      padding: 72px 40px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .recording-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .recording-card h2 {
+      display: flex;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--rec);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .recording-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .recording-timer {
+      font-family: var(--mono);
+      font-size: clamp(72px, 16vw, 168px);
+      font-weight: 400;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .recording-hint {
+      color: var(--muted);
+      margin-top: 20px;
+      max-width: 420px;
+    }
+
+    .recording-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 40px;
+    }
+
+    .recording-actions .shortcut {
+      font-size: 13px;
+      color: var(--faint);
+    }
+
+    .recording-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--rec);
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 10px;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.25; }
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .btn-stop {
+      background: var(--rec);
+      color: #fff;
+      min-width: 160px;
+    }
+
+    .btn-stop:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    @media (max-width: 860px) {
+      .recording-card {
+        padding: 48px 20px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .recording-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
     }
 
     /* Unsupported Website Modal */
@@ -359,7 +385,6 @@
       z-index: 2000;
       align-items: center;
       justify-content: center;
-      backdrop-filter: blur(4px);
     }
 
     .unsupported-modal.active {
@@ -367,59 +392,45 @@
     }
 
     .unsupported-modal-content {
-      background: #f3f4f6;
-      border-radius: 8px;
-      padding: 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      width: calc(100% - 32px);
       max-width: 400px;
-      width: 90%;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      overflow: hidden;
+      padding: 24px;
     }
 
     .unsupported-modal-header {
-      background: #f3f4f6;
-      padding: 16px 20px;
-      border-bottom: 1px solid #d1d5db;
-      font-size: 14px;
       font-weight: 500;
-      color: #374151;
+      margin-bottom: 8px;
     }
 
     .unsupported-modal-body {
-      padding: 20px;
-      background: white;
+      color: var(--muted);
       font-size: 14px;
-      color: #374151;
-      line-height: 1.5;
     }
 
     .unsupported-modal-footer {
-      padding: 12px 20px;
-      background: #f9fafb;
-      border-top: 1px solid #e5e7eb;
       display: flex;
       justify-content: flex-end;
+      margin-top: 24px;
     }
 
     .unsupported-modal-btn {
-      background: #3b82f6;
-      color: white;
+      height: 36px;
+      padding: 0 16px;
       border: none;
-      padding: 8px 16px;
-      border-radius: 4px;
-      font-size: 13px;
+      border-radius: 8px;
+      background: var(--btn-bg);
+      color: var(--btn-text);
+      font-family: inherit;
+      font-size: 14px;
       font-weight: 500;
       cursor: pointer;
-      transition: background 0.2s;
-      font-family: inherit;
     }
 
     .unsupported-modal-btn:hover {
-      background: #2563eb;
-    }
-
-    .unsupported-modal-btn:active {
-      background: #1d4ed8;
+      opacity: 0.85;
     }
 
     /* Camera overlay during recording */
@@ -448,127 +459,142 @@
       object-fit: cover;
       transform: scaleX(-1); /* Mirror for natural feel */
     }
+
+    /* Responsive */
+    @media (max-width: 860px) {
+      .page {
+        grid-template-columns: 1fr;
+        gap: 48px;
+        padding: 48px 20px;
+      }
+
+      .header {
+        position: static;
+      }
+
+      .brand {
+        margin-bottom: 28px;
+      }
+
+      .title {
+        font-size: 34px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .step {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .media-buttons .btn {
+        flex: 1 1 100%;
+      }
+    }
   </style>
 </head>
 <body>
-  <!-- Header -->
-  <header class="header">
-    <div class="brand">Cursorfly - Screen Recorder with Auto Pan Zoom</div>
-    <h1 class="title">Record your browser in three simple steps</h1>
-  </header>
+  <div class="page">
+    <!-- Intro -->
+    <header class="header">
+      <div class="brand">open-motions</div>
+      <h1 class="title">Record your browser in four steps.</h1>
+      <p class="subtitle">Pick a screen, add your camera or mic if you want, and hit record. Zooms and pans are added for you afterwards.</p>
+    </header>
 
-  <!-- Main Content -->
-  <main class="container">
-    <div class="steps-card">
-      <!-- Step 1: Share Screen -->
-      <div class="step">
-        <div class="step-number">1</div>
-        <div class="step-content">
-          <h3 class="step-title">Share this screen</h3>
-          <p class="step-description">Make sure to select the screen that is displaying this browser window. For best results, select the "Entire screen" option when prompted.</p>
-          <div style="margin-top: 12px; padding: 12px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
-            <strong style="color: #92400e;">🔊 Audio Recording:</strong>
-            <p style="margin: 8px 0 0 0; font-size: 13px; color: #78350f; line-height: 1.5;">
-              <strong>IMPORTANT:</strong> When the sharing dialog appears, you <strong>MUST</strong> check the checkbox for "Share tab audio" or "Share system audio" to record audio. If you don't check this box, your recording will be video-only.
-            </p>
-            <p style="margin: 10px 0 0 0; font-size: 13px; color: #78350f; line-height: 1.5; padding-top: 10px; border-top: 1px solid rgba(245, 158, 11, 0.35);">
-              <strong>Note:</strong> Turning on <strong>system audio</strong> in the share dialog will result in <strong>microphone audio not working</strong> for that recording. Use tab audio only if you need both screen sound and your mic, or skip system audio and use <strong>Enable microphone</strong> in step 2 instead.
-            </p>
-          </div>
-          <button id="selectScreenBtn" class="btn btn-primary">
-            <span class="btn-icon">🖥️</span>
-            Select screen
-          </button>
-          <div id="screenStatus" class="status-badge" style="display: none;">
-            <span class="dot"></span>
-            <span id="screenStatusText">Screen selected - Ready to record</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Step 2: Camera & microphone (optional, separate permissions) -->
-      <div class="step">
-        <div class="step-number">2</div>
-        <div class="step-content">
-          <h3 class="step-title">Camera & microphone (optional)</h3>
-          <p class="step-description">Choose what to add — each button asks for one permission only. Use <strong>Camera</strong> for a picture-in-picture overlay on the recording tab. Use <strong>Microphone</strong> to mix your voice with screen audio. You can enable one, both, or neither. <strong>If you turned on system audio in step 1, mic recording may not work.</strong></p>
-          <div class="media-buttons">
-            <button id="enableCameraBtn" class="btn btn-outline" type="button">
-              <span class="btn-icon">📹</span>
-              Enable camera (overlay)
+    <!-- Steps -->
+    <main>
+      <ol class="steps-card">
+        <!-- Step 1: Share Screen -->
+        <li class="step">
+          <div class="step-number">01</div>
+          <div class="step-content">
+            <h3 class="step-title">Share this screen</h3>
+            <p class="step-description">Select the screen showing this browser window. <strong>Entire screen</strong> gives the best results.</p>
+            <div class="note">
+              <p>To record sound, tick <strong>Share tab audio</strong> or <strong>Share system audio</strong> in the sharing dialog. Otherwise the recording is video only.</p>
+              <p>System audio turns off your microphone for that recording. If you need both, use tab audio instead.</p>
+            </div>
+            <button id="selectScreenBtn" class="btn btn-primary">
+              <span class="btn-icon">🖥️</span>
+              Select screen
             </button>
-            <button id="enableMicBtn" class="btn btn-outline" type="button">
-              <span class="btn-icon">🎤</span>
-              Enable microphone
+            <div id="screenStatus" class="status-badge" style="display: none;">
+              <span class="dot"></span>
+              <span id="screenStatusText">Screen selected - Ready to record</span>
+            </div>
+          </div>
+        </li>
+
+        <!-- Step 2: Camera & microphone (optional, separate permissions) -->
+        <li class="step">
+          <div class="step-number">02</div>
+          <div class="step-content">
+            <h3 class="step-title">Camera and microphone<span class="step-tag">optional</span></h3>
+            <p class="step-description">The camera adds a picture-in-picture overlay. The microphone mixes your voice with the screen audio. Each asks for its own permission.</p>
+            <div class="media-buttons">
+              <button id="enableCameraBtn" class="btn btn-outline" type="button">
+                <span class="btn-icon">📹</span>
+                Enable camera (overlay)
+              </button>
+              <button id="enableMicBtn" class="btn btn-outline" type="button">
+                <span class="btn-icon">🎤</span>
+                Enable microphone
+              </button>
+            </div>
+            <div id="cameraStatus" class="status-badge" style="display: none;">
+              <span class="dot"></span>
+              <span id="cameraStatusText"></span>
+            </div>
+          </div>
+        </li>
+
+        <!-- Step 3: Hide sharing bar -->
+        <li class="step">
+          <div class="step-number">03</div>
+          <div class="step-content">
+            <h3 class="step-title">Hide the sharing bar</h3>
+            <p class="step-description">Chrome's "sharing this screen" bar will show up in the recording unless you hide it. If it's on another display, ignore it.</p>
+          </div>
+        </li>
+
+        <!-- Step 4: Start Recording -->
+        <li class="step">
+          <div class="step-number">04</div>
+          <div class="step-content">
+            <h3 class="step-title">Start recording</h3>
+            <p class="step-description">You'll jump back to your previous tab and recording starts right away. Stop it from the toolbar button or this tab.</p>
+            <button id="startRecordingBtn" class="btn btn-outline" disabled>
+              <span class="btn-icon">🎬</span>
+              Start recording
             </button>
           </div>
-          <div id="cameraStatus" class="status-badge" style="display: none;">
-            <span class="dot"></span>
-            <span id="cameraStatusText"></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Step 3: Hide sharing bar -->
-      <div class="step">
-        <div class="step-number">3</div>
-        <div class="step-content">
-          <h3 class="step-title">Hide screen sharing bar</h3>
-          <p class="step-description">Unless hidden, the bar at the bottom will appear in your recording. If the bar appears on another screen, you can simply ignore it.</p>
-        </div>
-      </div>
-
-      <!-- Step 4: Start Recording -->
-      <div class="step">
-        <div class="step-number">4</div>
-        <div class="step-content">
-          <h3 class="step-title">Start recording</h3>
-          <p class="step-description">You will be taken to your previous tab and recording will start immediately. Stop the recording by pressing the extension's button in the toolbar or from this pinned tab.</p>
-          <button id="startRecordingBtn" class="btn btn-outline" disabled>
-            <span class="btn-icon">🎬</span>
-            Start recording
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tip Box -->
-    <div class="tip-box">
-      <p>
-        <strong>💡 Bonus tip:</strong> To start and stop recording easily, pin Cursorfly - Screen Recorder with Auto Pan Zoom to your extensions toolbar.
-      </p>
-    </div>
-  </main>
-
-  <!-- Footer -->
-  <footer class="footer">
-    <div>
-      <div class="footer-brand">Cursorfly - Screen Recorder with Auto Pan Zoom</div>
-      <p class="footer-description">A browser extension that creates beautiful screen recordings with zooms and pans that guide viewer focus.</p>
-      <p class="footer-copyright">© 2024 Cursorfly - Screen Recorder with Auto Pan Zoom</p>
-    </div>
-    <div class="footer-column">
-      <h4>Legal</h4>
-      <ul>
-        <li><a href="https://github.com/anugotta/cursorfly/blob/main/TERMS_OF_SERVICE.md" target="_blank" rel="noopener noreferrer">Terms of Service</a></li>
-        <li><a href="https://github.com/anugotta/cursorfly/blob/main/PRIVACY_POLICY.md" target="_blank" rel="noopener noreferrer">Privacy Policy</a></li>
-      </ul>
-    </div>
-  </footer>
+        </li>
+      </ol>
+    </main>
+  </div>
 
   <!-- Recording Overlay -->
   <div id="recordingOverlay" class="recording-overlay">
     <div class="recording-card">
-      <h2 style="font-size: 24px; margin-bottom: 8px;">
-        <span class="recording-dot"></span>
-        Recording...
-      </h2>
-      <p style="color: #6b7280; margin-bottom: 16px;">Click areas you want to emphasize</p>
-      <div class="recording-timer" id="timer">00:00</div>
-      <button id="stopRecordingBtn" class="btn btn-primary" style="background: #ef4444; width: 100%;">
-        <span class="btn-icon">⏹️</span>
-        Stop Recording
-      </button>
+      <div class="recording-top">
+        <div class="brand" style="margin-bottom: 0;">open-motions</div>
+        <h2>
+          <span class="recording-dot"></span>
+          Recording
+        </h2>
+      </div>
+      <div class="recording-body">
+        <div class="recording-timer" id="timer">00:00</div>
+        <p class="recording-hint">Your other tab is being recorded. Click the areas you want to emphasize and they'll be zoomed in automatically.</p>
+        <div class="recording-actions">
+          <button id="stopRecordingBtn" class="btn btn-stop">
+            <span class="btn-icon">⏹️</span>
+            Stop Recording
+          </button>
+          <span class="shortcut">or click the extension button in the toolbar</span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -581,10 +607,10 @@
   <div id="unsupportedModal" class="unsupported-modal">
     <div class="unsupported-modal-content">
       <div class="unsupported-modal-header">
-        The extension Cursorfly - Screen Recorder with Auto Pan Zoom says
+        Can't record this page
       </div>
       <div class="unsupported-modal-body" id="unsupportedModalMessage">
-        Cursorfly - Screen Recorder with Auto Pan Zoom is not allowed to record your mouse interactions on Chrome Web Store and Settings pages.
+        Open-Motions - Screen Recorder with Auto Pan Zoom is not allowed to record your mouse interactions on Chrome Web Store and Settings pages.
       </div>
       <div class="unsupported-modal-footer">
         <button id="unsupportedModalOk" class="unsupported-modal-btn">OK</button>

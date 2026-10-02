@@ -1,5 +1,5 @@
 /**
- * CursorFly Screen Recorder
+ * Open-Motions Screen Recorder
  * Copyright (c) 2026 Anu S Pillai
  * GitHub: https://github.com/anugotta
  *
@@ -220,7 +220,7 @@ async function saveRecording(blob) {
     
     // Generate filename
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `cursorfly-${timestamp}.webm`;
+    const filename = `open-motions-${timestamp}.webm`;
     
     console.log('Requesting download:', filename);
     

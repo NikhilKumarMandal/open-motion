@@ -1,5 +1,5 @@
 /**
- * CursorFly Screen Recorder
+ * Open-Motions Screen Recorder
  * Copyright (c) 2026 Anu S Pillai
  * GitHub: https://github.com/anugotta
  *
@@ -226,7 +226,7 @@ function downloadProcessedVideo() {
   const a = document.createElement('a');
   a.style.display = 'none';
   a.href = url;
-  a.download = 'cursorfly-' + Date.now() + '.webm';
+  a.download = 'open-motions-' + Date.now() + '.webm';
   document.body.appendChild(a);
   a.click();
   
