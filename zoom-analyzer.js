@@ -24,6 +24,47 @@ class ZoomAnalyzer {
     
     // Gap threshold - only zoom out if next click is 5+ seconds away
     this.ZOOM_OUT_GAP = 5000;        // 5 seconds
+
+    // Scrolling: a burst of scroll events becomes zoom anchors at the cursor
+    this.SCROLL_BURST_GAP = 700;     // Scroll events closer than this belong to one burst
+    this.SCROLL_ANCHOR_EVERY = 800;  // One anchor per this many ms of scrolling
+  }
+
+  /**
+   * Turn scroll bursts into click-like anchors positioned at the cursor, so the
+   * camera stays zoomed in and follows the pointer while the page scrolls.
+   */
+  scrollAnchors(cursorData) {
+    const scrolls = cursorData.filter(d => d.type === 'scroll').map(d => d.timestamp).sort((a, b) => a - b);
+    if (scrolls.length === 0) return [];
+
+    const moves = cursorData
+      .filter(d => (d.type === 'move' || d.type === 'click' || d.type === 'mousedown') && d.normalizedX !== undefined)
+      .sort((a, b) => a.timestamp - b.timestamp);
+    const cursorAt = (t) => {
+      let last = null;
+      for (const m of moves) {
+        if (m.timestamp > t) break;
+        last = m;
+      }
+      return last
+        ? { normalizedX: last.normalizedX, normalizedY: last.normalizedY }
+        : { normalizedX: 0.5, normalizedY: 0.5 };
+    };
+
+    const anchors = [];
+    let burstStart = scrolls[0];
+    let lastAnchor = -Infinity;
+    for (let i = 0; i < scrolls.length; i++) {
+      const t = scrolls[i];
+      if (i > 0 && t - scrolls[i - 1] > this.SCROLL_BURST_GAP) burstStart = t;
+      const isBurstEnd = i === scrolls.length - 1 || scrolls[i + 1] - t > this.SCROLL_BURST_GAP;
+      if (t === burstStart || t - lastAnchor >= this.SCROLL_ANCHOR_EVERY || isBurstEnd) {
+        anchors.push({ type: 'scroll', timestamp: t, ...cursorAt(t) });
+        lastAnchor = t;
+      }
+    }
+    return anchors;
   }
 
   /**
@@ -31,14 +72,17 @@ class ZoomAnalyzer {
    * Stays zoomed and pans between clicks if they're close together
    * Only zooms out when there's a 5+ second gap
    */
-  analyzeClicks(cursorData, videoWidth = 1920, videoHeight = 1080) {
+  analyzeClicks(cursorData, videoWidth = 1920, videoHeight = 1080, options = {}) {
     console.log('[ZoomAnalyzer] Analyzing', cursorData.length, 'cursor events');
     console.log('[ZoomAnalyzer] Video dimensions:', videoWidth, 'x', videoHeight);
-    
-    // Get ALL clicks
-    const clicks = cursorData.filter(d => 
+
+    // Get ALL clicks (plus scroll anchors when following scrolling)
+    const clicks = cursorData.filter(d =>
       d.type === 'click' || d.type === 'doubleclick' || d.type === 'mousedown'
     );
+    if (options.followScroll) {
+      clicks.push(...this.scrollAnchors(cursorData));
+    }
     
     console.log('[ZoomAnalyzer] Found', clicks.length, 'click events');
     

@@ -10,14 +10,19 @@ Open-Motions records your browser tab, tracks your cursor and clicks, and turns 
 
 - **One-click recording** — record the current tab straight from the toolbar popup.
 - **Cursor & click tracking** — cursor movement, clicks and keystrokes are captured alongside the video.
-- **Automatic zoom & pan** — zooms in ahead of each click, pans between nearby clicks, and zooms back out during pauses.
+- **Automatic zoom & pan** — zooms in ahead of each click, pans between nearby clicks, follows the cursor while you scroll, and zooms back out during pauses.
+- **Countdown** — an optional 3 or 5 second countdown on the recorded tab before recording starts.
 - **Audio** — optionally record system/tab audio and your microphone.
 - **Camera overlay** — optionally add your webcam to the recording.
 - **Built-in editor**
   - Trim the start and end of a recording
   - Aspect ratio presets (Native, 16:9, and more)
   - Backgrounds and padding around the captured screen
-  - Toggle zoom, click highlights and browser UI
+  - Toggle zoom, click highlights, browser UI and the taskbar / Dock
+  - Smooth, larger cursor drawn from your recorded mouse movement
+  - Keystroke overlay for shortcuts like Ctrl+K or Enter (typing in text fields is never recorded)
+  - Blur areas to hide emails, passwords or API keys, for the whole clip or part of it
+  - Export presets for YouTube, X, LinkedIn and Reels / TikTok, plus animated GIF export
 - **Quality controls** — 480p / 720p / 1080p at 24, 30 or 60 FPS.
 - **100% offline & private** — recordings are processed on your device and never leave it.
 

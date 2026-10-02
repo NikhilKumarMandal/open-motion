@@ -73,7 +73,11 @@ class VideoProcessor {
       antiAlias: true,
       showBrowserFrame: true, // true = show browser UI, false = hide browser UI (auto-crop)
       taskbarCrop: 0, // Pixels to crop from the bottom (OS taskbar / Dock), computed by the editor
-      showShadow: true // true = show shadow effect, false = hide shadow
+      showShadow: true, // true = show shadow effect, false = hide shadow
+      blurRegions: [], // [{ x, y, w, h, start?, end? }] normalised to the source frame
+      cursor: null, // { enabled, size, smoothing, hideWhenIdle } - smooth cursor overlay
+      keystrokes: null, // { enabled, size, position } - keystroke labels
+      onFrame: null // (canvas, seconds) called after each finished frame
     };
     
     this.backgroundImageElement = null; // Preloaded background image
@@ -100,6 +104,11 @@ class VideoProcessor {
     
     this.analyzer = new ZoomAnalyzer();
     this.cursorData = cursorData || [];
+    this.overlays = typeof OverlayRenderer !== 'undefined' ? OverlayRenderer : null;
+    if (this.overlays) {
+      this.cursorTrack = this.overlays.buildCursorTrack(this.cursorData);
+      this.keyTrack = this.overlays.buildKeyTrack(this.cursorData);
+    }
 
     return new Promise(async (resolve, reject) => {
       try {
@@ -897,13 +906,29 @@ class VideoProcessor {
           this.ctx.imageSmoothingQuality = wasSmoothingQuality;
           
           this.ctx.filter = 'none';
-          
+
+          // Shared overlays (same code as the editor preview)
+          const overlayMap = { sx: sourceX, sy: sourceY, sw: sourceWidth, sh: sourceHeight, dx, dy, dw, dh };
+          const overlayFrame = { videoWidth: srcWidth, videoHeight: srcHeight, bottomCrop: taskbarCrop };
+          if (this.overlays) {
+            this.overlays.drawBlurRegions(this.ctx, this.video, this.settings.blurRegions, timestamp, overlayMap, overlayFrame);
+          }
+
           this.drawClickEffects(timestamp, dx, dy, dw, dh, srcWidth, srcHeight, sourceY, sourceHeight);
-          
+
+          if (this.overlays && this.settings.cursor && this.settings.cursor.enabled) {
+            this.overlays.drawCursor(this.ctx, this.cursorTrack, timestamp, overlayMap, overlayFrame, this.settings.cursor);
+          }
+
           this.ctx.restore();
-          
+
           this.drawVideoFrame(dx, dy, dw, dh, radius);
-          
+
+          if (this.overlays && this.settings.keystrokes && this.settings.keystrokes.enabled) {
+            const area = { x: 0, y: 0, w: this.canvas.width, h: this.canvas.height };
+            this.overlays.drawKeystrokes(this.ctx, this.keyTrack, timestamp, area, this.settings.keystrokes);
+          }
+
           if (isNewVideoFrame) {
             lastDrawnVideoTime = this.video.currentTime;
             previousVideoTime = this.video.currentTime;
@@ -936,7 +961,12 @@ class VideoProcessor {
         }
         const prevCtx = previousFrameData.getContext('2d');
         prevCtx.drawImage(this.canvas, 0, 0);
-        
+
+        // Let the caller sample finished frames (used for GIF export)
+        if (typeof this.settings.onFrame === 'function') {
+          this.settings.onFrame(this.canvas, currentVideoTime - startTime);
+        }
+
         // Update frame timing stats
         this.frameTiming.frameCount++;
         const fpsUpdateInterval = 1000; // Update FPS calculation every second

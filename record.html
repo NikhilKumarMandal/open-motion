@@ -256,6 +256,81 @@
       display: none !important;
     }
 
+    /* Hide-cursor option */
+    .check-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 0 0 20px;
+      max-width: 520px;
+      color: var(--muted);
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .check-option input {
+      width: 16px;
+      height: 16px;
+      margin-top: 3px;
+      accent-color: var(--text);
+      flex-shrink: 0;
+    }
+
+    .check-option strong {
+      display: block;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    /* Countdown choice */
+    .countdown-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .countdown-label {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .segmented {
+      display: inline-flex;
+      padding: 3px;
+      gap: 2px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface);
+    }
+
+    .segmented button {
+      height: 30px;
+      min-width: 48px;
+      padding: 0 12px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .segmented button:hover {
+      color: var(--text);
+    }
+
+    .segmented button.selected {
+      background: var(--btn-bg);
+      color: var(--btn-text);
+    }
+
+    .segmented button:focus-visible {
+      outline: 2px solid var(--text);
+      outline-offset: 2px;
+    }
+
     /* Recording state: full-screen view in the page's own style */
     .recording-overlay {
       display: none;
@@ -515,6 +590,13 @@
               <p>To record sound, tick <strong>Share tab audio</strong> or <strong>Share system audio</strong> in the sharing dialog. Otherwise the recording is video only.</p>
               <p>System audio turns off your microphone for that recording. If you need both, use tab audio instead.</p>
             </div>
+            <label class="check-option hidden" id="hideCursorOption">
+              <input type="checkbox" id="hideCursorCheckbox" checked>
+              <span>
+                <strong>Hide system cursor</strong>
+                The editor draws a smooth, larger cursor instead. It's only shown over this tab's page.
+              </span>
+            </label>
             <button id="selectScreenBtn" class="btn btn-primary">
               <span class="btn-icon">🖥️</span>
               Select screen
@@ -563,7 +645,15 @@
           <div class="step-number">04</div>
           <div class="step-content">
             <h3 class="step-title">Start recording</h3>
-            <p class="step-description">You'll jump back to your previous tab and recording starts right away. Stop it from the toolbar button or this tab.</p>
+            <p class="step-description">You'll jump back to your previous tab, see a countdown, and recording starts. Stop it from the toolbar button or this tab.</p>
+            <div class="countdown-row">
+              <span class="countdown-label">Countdown</span>
+              <div class="segmented" id="countdownGroup" role="group" aria-label="Countdown before recording">
+                <button type="button" data-value="0">Off</button>
+                <button type="button" data-value="3">3s</button>
+                <button type="button" data-value="5">5s</button>
+              </div>
+            </div>
             <button id="startRecordingBtn" class="btn btn-outline" disabled>
               <span class="btn-icon">🎬</span>
               Start recording

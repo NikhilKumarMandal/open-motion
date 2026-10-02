@@ -19,6 +19,7 @@ let recordedVideoHeight = 0;
 let videoDataReady = false;
 let cursorDataReady = false;
 let cameraOverlayEnabled = false;
+let systemCursorHidden = false; // Recording was captured without the OS cursor
 let cameraFrameData = null; // Store latest camera frame from record.html
 let previousRecordingTabId = null; // Track previous tab to remove overlay when switching
 
@@ -298,6 +299,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     recordedVideoWidth = message.width || 1280;
     recordedVideoHeight = message.height || 720;
     cameraOverlayEnabled = message.cameraOverlayEnabled || false;
+    systemCursorHidden = message.systemCursorHidden || false;
     videoDataReady = true;
     console.log('[Background] ✅ Video data stored!');
     console.log('[Background] Camera overlay enabled:', cameraOverlayEnabled);
@@ -327,6 +329,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       videoDataReady: videoDataReady,
       cursorDataReady: cursorDataReady,
       cameraOverlayEnabled: cameraOverlayEnabled,
+      systemCursorHidden: systemCursorHidden,
       videoStoredInIndexedDB: videoStoredInIndexedDB // Flag to indicate IndexedDB storage
     });
     

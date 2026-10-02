@@ -39,6 +39,23 @@ let micStream = null;
 let isRecording = false;
 let startTime = 0;
 let timerInterval = null;
+/** The capture was made without the OS cursor (the editor draws a smooth one instead) */
+let systemCursorHidden = false;
+let recordingCursorHidden = false;
+
+// Chrome only honours `cursor: 'never'` where it lists the constraint as supported
+const supportsCursorConstraint = !!(navigator.mediaDevices &&
+  navigator.mediaDevices.getSupportedConstraints &&
+  navigator.mediaDevices.getSupportedConstraints().cursor);
+
+const COUNTDOWN_KEY = 'openMotions.countdown';
+let countdownSeconds = 3;
+try {
+  const saved = localStorage.getItem(COUNTDOWN_KEY);
+  if (saved !== null && ['0', '3', '5'].includes(saved)) countdownSeconds = Number(saved);
+} catch (e) {
+  // Storage unavailable: keep the default
+}
 
 // DOM Elements
 const selectScreenBtn = document.getElementById('selectScreenBtn');
@@ -201,6 +218,81 @@ enableMicBtn.addEventListener('click', enableMicrophone);
 startRecordingBtn.addEventListener('click', startRecording);
 stopRecordingBtn.addEventListener('click', stopRecording);
 
+// Hide-system-cursor option (only where the browser supports it)
+const hideCursorOption = document.getElementById('hideCursorOption');
+const hideCursorCheckbox = document.getElementById('hideCursorCheckbox');
+if (hideCursorOption && supportsCursorConstraint) {
+  hideCursorOption.classList.remove('hidden');
+}
+
+// Countdown choice, remembered between recordings
+const countdownGroup = document.getElementById('countdownGroup');
+function renderCountdownChoice() {
+  countdownGroup.querySelectorAll('[data-value]').forEach((btn) => {
+    const selected = Number(btn.dataset.value) === countdownSeconds;
+    btn.classList.toggle('selected', selected);
+    btn.setAttribute('aria-pressed', String(selected));
+  });
+}
+countdownGroup.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-value]');
+  if (!btn) return;
+  countdownSeconds = Number(btn.dataset.value);
+  try {
+    localStorage.setItem(COUNTDOWN_KEY, String(countdownSeconds));
+  } catch (err) {
+    // Not persisted; still used for this recording
+  }
+  renderCountdownChoice();
+});
+renderCountdownChoice();
+
+// Shows 3-2-1 on the tab being recorded. Resolves once the overlay is gone,
+// so the countdown itself never ends up in the video.
+async function runCountdown(seconds) {
+  if (!seconds) return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      args: [seconds],
+      func: (total) => new Promise((resolve) => {
+        const host = document.createElement('div');
+        host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;' +
+          'justify-content:center;pointer-events:none;background:rgba(0,0,0,0.25);';
+        const dial = document.createElement('div');
+        dial.style.cssText = 'width:168px;height:168px;border-radius:50%;display:flex;align-items:center;' +
+          'justify-content:center;background:rgba(14,14,14,0.88);color:#fff;box-shadow:0 24px 64px rgba(0,0,0,0.35);' +
+          "font:500 80px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;transition:transform .35s ease,opacity .35s ease;";
+        host.appendChild(dial);
+        document.documentElement.appendChild(host);
+
+        let n = total;
+        const tick = () => {
+          if (n === 0) {
+            host.remove();
+            // Two frames so the removal is actually painted before recording starts
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+            return;
+          }
+          dial.textContent = String(n);
+          dial.style.transform = 'scale(1.08)';
+          dial.style.opacity = '1';
+          setTimeout(() => {
+            dial.style.transform = 'scale(0.92)';
+            dial.style.opacity = '0.6';
+          }, 600);
+          n--;
+          setTimeout(tick, 1000);
+        };
+        tick();
+      })
+    });
+  } catch (error) {
+    // Pages we can't script just skip the countdown
+    console.warn('[Record] Countdown skipped:', error.message);
+  }
+}
+
 // Step 1: Select Screen - Uses getDisplayMedia to show picker on THIS page
 // Following the approach from: https://www.recall.ai/blog/how-to-build-a-chrome-recording-extension
 async function selectScreen() {
@@ -223,6 +315,11 @@ async function selectScreen() {
       preferCurrentTab: false,
       selfBrowserSurface: 'exclude'
     };
+
+    // Leave the OS cursor out so the editor's smooth cursor is the only one
+    if (supportsCursorConstraint && hideCursorCheckbox && hideCursorCheckbox.checked) {
+      displayMediaOptions.video.cursor = 'never';
+    }
     
     // Try to include systemAudio if supported (newer API)
     // Note: This may not work on all platforms/browsers
@@ -257,6 +354,10 @@ async function selectScreen() {
       });
       console.log('[Record] ✅ System/tab audio will be recorded');
     }
+
+    // Only trust the setting the browser actually applied
+    systemCursorHidden = settings.cursor === 'never';
+    if (hideCursorCheckbox) hideCursorCheckbox.disabled = true;
 
     // Update UI
     selectScreenBtn.innerHTML = '<span class="btn-icon">✅</span> Screen selected';
@@ -448,7 +549,9 @@ function resetUI() {
   
   screenStatus.style.display = 'none';
   mediaStream = null;
-  
+  systemCursorHidden = false;
+  if (hideCursorCheckbox) hideCursorCheckbox.disabled = false;
+
   resetOptionalMediaUI();
 }
 
@@ -634,6 +737,11 @@ async function startRecording() {
     } catch (e) {
       console.warn('[Record] Could not switch to original tab:', e);
     }
+
+    // Countdown on the recorded tab; recording starts once it has disappeared
+    await runCountdown(countdownSeconds);
+    // Kept per recording: the share can end (and reset the UI) before the video is saved
+    recordingCursorHidden = systemCursorHidden;
 
     // FIFTH: Sync recording start time right before MediaRecorder starts
     // This ensures cursor timestamps align perfectly with video timestamps
@@ -1073,7 +1181,8 @@ async function saveRecording(blob) {
         size: blob.size,
         width: videoWidth,
         height: videoHeight,
-        cameraOverlayEnabled: hasCameraOverlay()
+        cameraOverlayEnabled: hasCameraOverlay(),
+        systemCursorHidden: recordingCursorHidden
       });
       
       if (!storeResponse || !storeResponse.success) {
@@ -1120,7 +1229,8 @@ async function saveRecording(blob) {
           size: blob.size,
           width: videoWidth,
           height: videoHeight,
-          cameraOverlayEnabled: hasCameraOverlay()
+          cameraOverlayEnabled: hasCameraOverlay(),
+        systemCursorHidden: recordingCursorHidden
         });
         
         if (!storeResponse || !storeResponse.success) {
@@ -1137,7 +1247,8 @@ async function saveRecording(blob) {
           size: blob.size,
           width: videoWidth,
           height: videoHeight,
-          cameraOverlayEnabled: hasCameraOverlay()
+          cameraOverlayEnabled: hasCameraOverlay(),
+        systemCursorHidden: recordingCursorHidden
         });
         
         if (!storeResponse || !storeResponse.success) {

@@ -119,8 +119,29 @@ const settings = {
   clickForce: 'moderate',
   showBrowserFrame: true,         // false = auto-crop browser UI from the top
   showTaskbar: true,              // false = auto-crop the OS taskbar / Dock from the bottom
-  showShadow: true
+  showShadow: true,
+  followScroll: true,             // Zoom in and follow the cursor while the page scrolls
+  cursor: { enabled: false, size: '1.5', smoothing: 'medium', hideWhenIdle: true },
+  keystrokes: { enabled: true, size: 'medium', position: 'center' }
 };
+
+// One-click export setups; `aspect` is applied to the preview too
+const exportPresets = {
+  youtube: { aspect: '16:9', format: 'mp4', resolution: '1080p', quality: 'high' },
+  x: { aspect: '16:9', format: 'mp4', resolution: '720p', quality: 'high' },
+  linkedin: { aspect: '1:1', format: 'mp4', resolution: '1080p', quality: 'high' },
+  vertical: { aspect: '9:16', format: 'mp4', resolution: '1080p', quality: 'high' },
+  readme: { format: 'gif', gifWidth: '640', gifFps: '15' }
+};
+
+let blurRegions = [];             // [{ x, y, w, h, start, end }] — 0-1 of the video frame, times in ms
+let blurDraft = null;             // In-progress rectangle while drawing
+let isDrawingBlur = false;
+let highlightedBlur = -1;
+let cursorTrack = null;
+let keyTrack = null;
+let systemCursorHidden = false;   // The recording was made without the OS cursor
+let overlayCtx = null;
 
 let lastGradient = settings.background;
 let analyzer = null;
@@ -235,8 +256,9 @@ document.addEventListener('DOMContentLoaded', () => {
     'trimmedRight', 'trimWindow', 'trimStartHandle', 'trimEndHandle', 'playhead', 'zoomCountText',
     'deleteZoomBtn', 'exportBtn', 'recordingMeta', 'metaResolution', 'metaDuration', 'metaClicks',
     'metaClicksChip', 'bgGrid', 'bgImagePanel', 'bgImageDrop', 'bgImageDropText', 'customColorPicker',
-    'hexColorInput', 'toast'
+    'hexColorInput', 'toast', 'overlayCanvas', 'blurLayer', 'blurList', 'blurDrawHint', 'cursorHint', 'keysHint'
   ].forEach((id) => { els[id] = $(id); });
+  overlayCtx = els.overlayCanvas.getContext('2d');
 
   analyzer = new ZoomAnalyzer();
   processor = new VideoProcessor();
@@ -263,6 +285,10 @@ async function init() {
     videoWidth = response.videoWidth || 1920;
     videoHeight = response.videoHeight || 1080;
     cameraOverlayEnabled = response.cameraOverlayEnabled || false;
+    // Without the OS cursor in the video, the drawn cursor is the only one: turn it on
+    systemCursorHidden = Boolean(response.systemCursorHidden);
+    settings.cursor.enabled = systemCursorHidden;
+    syncSettingsUI();
 
     let blob;
     if (response.videoStoredInIndexedDB && typeof response.videoData === 'string' && !response.videoData.startsWith('data:')) {
@@ -388,7 +414,27 @@ function describeLoadError(error) {
 function setCursorData(data) {
   cursorData = Array.isArray(data) ? data : [];
   clickEvents = cursorData.filter((d) => d.type === 'click' || d.type === 'doubleclick');
+  cursorTrack = OverlayRenderer.buildCursorTrack(cursorData);
+  keyTrack = OverlayRenderer.buildKeyTrack(cursorData);
   debugLog('[Editor] Cursor data points:', cursorData.length, 'clicks:', clickEvents.length);
+  updateOverlayHints();
+}
+
+function updateOverlayHints() {
+  if (!els.cursorHint) return;
+  const hasMoves = cursorTrack && cursorTrack.samples.length > 0;
+  if (!hasMoves) {
+    els.cursorHint.textContent = 'No mouse movement was recorded for this video.';
+  } else if (settings.cursor.enabled && !systemCursorHidden) {
+    els.cursorHint.textContent = 'This recording already includes your system cursor. Keep smoothing on Low and size at 1.5× or more so the new cursor covers it.';
+  } else {
+    els.cursorHint.textContent = 'Draws a smooth, larger cursor from your recorded mouse movement.';
+  }
+
+  const keyCount = keyTrack ? keyTrack.items.length : 0;
+  els.keysHint.textContent = keyCount > 0
+    ? `${keyCount} shortcut${keyCount === 1 ? '' : 's'} recorded. Typing in text fields is never recorded.`
+    : 'No shortcuts were recorded. Typing in text fields is never recorded.';
 }
 
 function setVideoUrl(url) {
@@ -472,6 +518,8 @@ async function onVideoReady() {
   undoStack = [];
   redoStack = [];
   selectedZoomIndex = -1;
+  blurRegions = [];
+  renderBlurUI();
 
   ctx = els.previewCanvas.getContext('2d', { alpha: false });
 
@@ -589,7 +637,16 @@ function syncSettingsUI() {
   $('showTaskbar').checked = settings.showTaskbar;
   $('showShadow').checked = settings.showShadow;
   $('applyZoom').checked = settings.applyZoom;
+  $('zoomOnScroll').checked = settings.followScroll;
   $('clickEnabled').checked = settings.clickStyle !== 'none';
+  $('cursorEnabled').checked = settings.cursor.enabled;
+  $('cursorHideIdle').checked = settings.cursor.hideWhenIdle;
+  setChoice('cursorSizeGroup', settings.cursor.size);
+  setChoice('cursorSmoothGroup', settings.cursor.smoothing);
+  $('keysEnabled').checked = settings.keystrokes.enabled;
+  setChoice('keysSizeGroup', settings.keystrokes.size);
+  setChoice('keysPositionGroup', settings.keystrokes.position);
+  updateOverlayHints();
   els.customColorPicker.value = settings.customClickColor;
   els.hexColorInput.value = settings.customClickColor;
   showBackgroundPanel(settings.background === 'hidden' ? 'hidden' : settings.background === 'image' ? 'image' : 'gradient');
@@ -725,6 +782,58 @@ function setupEventListeners() {
     requestRedraw();
   });
 
+  // Scroll-follow zoom
+  $('zoomOnScroll').addEventListener('change', (e) => {
+    settings.followScroll = e.target.checked;
+    analyzeZoom();
+    requestRedraw();
+  });
+
+  // Cursor
+  $('cursorEnabled').addEventListener('change', (e) => {
+    settings.cursor.enabled = e.target.checked;
+    // The real cursor is baked into the video: track it tightly so the drawn one covers it
+    if (settings.cursor.enabled && !systemCursorHidden) {
+      settings.cursor.smoothing = 'low';
+      setChoice('cursorSmoothGroup', 'low');
+    }
+    updateOverlayHints();
+    requestRedraw();
+  });
+  $('cursorHideIdle').addEventListener('change', (e) => {
+    settings.cursor.hideWhenIdle = e.target.checked;
+    requestRedraw();
+  });
+  bindChoiceGroup('cursorSizeGroup', (value) => {
+    settings.cursor.size = value;
+    requestRedraw();
+  });
+  bindChoiceGroup('cursorSmoothGroup', (value) => {
+    settings.cursor.smoothing = value;
+    requestRedraw();
+  });
+
+  // Keystrokes
+  $('keysEnabled').addEventListener('change', (e) => {
+    settings.keystrokes.enabled = e.target.checked;
+    requestRedraw();
+  });
+  bindChoiceGroup('keysSizeGroup', (value) => {
+    settings.keystrokes.size = value;
+    requestRedraw();
+  });
+  bindChoiceGroup('keysPositionGroup', (value) => {
+    settings.keystrokes.position = value;
+    requestRedraw();
+  });
+
+  // Blur
+  $('addBlurBtn').addEventListener('click', () => (isDrawingBlur ? stopBlurDrawing() : startBlurDrawing()));
+  setupBlurDrawing();
+  els.blurList.addEventListener('click', onBlurListClick);
+  els.blurList.addEventListener('mouseover', (e) => setBlurHighlight(e.target.closest('.blur-item')));
+  els.blurList.addEventListener('mouseleave', () => setBlurHighlight(null));
+
   // Video state
   video.addEventListener('play', updatePlayButton);
   video.addEventListener('pause', updatePlayButton);
@@ -750,6 +859,10 @@ function handleKeydown(e) {
   const exportOpen = !$('exportModal').classList.contains('hidden');
   if (exportOpen) {
     if (e.code === 'Escape') closeExportModal();
+    return;
+  }
+  if (isDrawingBlur && e.code === 'Escape') {
+    stopBlurDrawing();
     return;
   }
 
@@ -899,6 +1012,17 @@ function updateFrameSize() {
     canvas.width = source.width;
     canvas.height = source.height;
   }
+
+  // Keystroke canvas covers the whole frame at device resolution
+  const dpr = window.devicePixelRatio || 1;
+  const overlayW = Math.round(frameW * dpr);
+  const overlayH = Math.round(frameH * dpr);
+  if (els.overlayCanvas.width !== overlayW || els.overlayCanvas.height !== overlayH) {
+    els.overlayCanvas.width = overlayW;
+    els.overlayCanvas.height = overlayH;
+  }
+
+  renderBlurRects();
   requestRedraw();
 }
 
@@ -939,9 +1063,29 @@ function drawFrame() {
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(els.video, source.x, source.y, source.width, source.height, 0, 0, canvas.width, canvas.height);
 
+  const tMs = els.video.currentTime * 1000;
+  const map = { sx: source.x, sy: source.y, sw: source.width, sh: source.height, dx: 0, dy: 0, dw: canvas.width, dh: canvas.height };
+  const frame = getOverlayFrame();
+  OverlayRenderer.drawBlurRegions(ctx, els.video, blurRegions, tMs, map, frame);
+
   if (settings.clickStyle !== 'none') {
     drawClickEffects();
   }
+
+  if (settings.cursor.enabled) {
+    OverlayRenderer.drawCursor(ctx, cursorTrack, tMs, map, frame, settings.cursor);
+  }
+
+  // Keystrokes: frame-level overlay, unaffected by zoom (matches the export)
+  const overlay = els.overlayCanvas;
+  overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+  if (settings.keystrokes.enabled) {
+    OverlayRenderer.drawKeystrokes(overlayCtx, keyTrack, tMs, { x: 0, y: 0, w: overlay.width, h: overlay.height }, settings.keystrokes);
+  }
+}
+
+function getOverlayFrame() {
+  return { videoWidth, videoHeight, bottomCrop: getBottomCrop() };
 }
 
 // The video window is centred with translate(-50%, -50%); zoom/pan is layered on top
@@ -1280,7 +1424,8 @@ function resetTrim() {
 function snapshotState() {
   return {
     zoomSegments: structuredClone(zoomSegments),
-    trimHandles: { ...trimHandles }
+    trimHandles: { ...trimHandles },
+    blurRegions: structuredClone(blurRegions)
   };
 }
 
@@ -1293,9 +1438,11 @@ function pushUndo(snapshot) {
 function restoreState(state) {
   zoomSegments = state.zoomSegments;
   trimHandles = state.trimHandles;
+  blurRegions = state.blurRegions || [];
   selectedZoomIndex = -1;
   updateZoomUI();
   updateTrimUI();
+  renderBlurUI();
   requestRedraw();
 }
 
@@ -1318,7 +1465,7 @@ function analyzeZoom() {
     zoomSegments = [];
   } else {
     analyzer.ZOOM_LEVEL = zoomDepths[settings.zoomDepth];
-    zoomSegments = analyzer.analyzeClicks(cursorData, videoWidth, videoHeight);
+    zoomSegments = analyzer.analyzeClicks(cursorData, videoWidth, videoHeight, { followScroll: settings.followScroll });
     debugLog('[Editor] Found', zoomSegments.length, 'zoom segments');
   }
   selectedZoomIndex = -1;
@@ -1407,6 +1554,144 @@ function deleteSelectedZoom() {
   requestRedraw();
 }
 
+// ========== BLUR AREAS ==========
+
+const ADD_BLUR_HTML = iconSvg('plus') + 'Blur an area';
+const MIN_BLUR_SIZE = 0.01;       // Ignore accidental clicks (fraction of the frame)
+
+function startBlurDrawing() {
+  if (!videoLoaded) return;
+  els.video.pause();
+  isDrawingBlur = true;
+  els.previewArea.classList.add('drawing-blur');
+  els.blurDrawHint.classList.remove('hidden');
+  $('addBlurBtn').innerHTML = iconSvg('x') + 'Cancel';
+}
+
+function stopBlurDrawing() {
+  isDrawingBlur = false;
+  blurDraft = null;
+  els.previewArea.classList.remove('drawing-blur');
+  els.blurDrawHint.classList.add('hidden');
+  $('addBlurBtn').innerHTML = ADD_BLUR_HTML;
+  renderBlurRects();
+}
+
+// Pointer position -> 0-1 of the full video frame (the layer shows the cropped source rect)
+function blurPointFromEvent(e) {
+  const rect = els.blurLayer.getBoundingClientRect();
+  const source = getSourceRect();
+  const fx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+  const fy = clamp((e.clientY - rect.top) / rect.height, 0, 1);
+  return {
+    x: (source.x + fx * source.width) / videoWidth,
+    y: (source.y + fy * source.height) / videoHeight
+  };
+}
+
+function setupBlurDrawing() {
+  const layer = els.blurLayer;
+  layer.addEventListener('pointerdown', (e) => {
+    if (!isDrawingBlur || e.button !== 0) return;
+    e.preventDefault();
+    layer.setPointerCapture(e.pointerId);
+    const p = blurPointFromEvent(e);
+    blurDraft = { ax: p.x, ay: p.y, x: p.x, y: p.y, w: 0, h: 0 };
+    renderBlurRects();
+  });
+
+  layer.addEventListener('pointermove', (e) => {
+    if (!blurDraft) return;
+    const p = blurPointFromEvent(e);
+    blurDraft.x = Math.min(blurDraft.ax, p.x);
+    blurDraft.y = Math.min(blurDraft.ay, p.y);
+    blurDraft.w = Math.abs(p.x - blurDraft.ax);
+    blurDraft.h = Math.abs(p.y - blurDraft.ay);
+    renderBlurRects();
+  });
+
+  const finish = () => {
+    if (!blurDraft) return;
+    const { x, y, w, h } = blurDraft;
+    blurDraft = null;
+    if (w >= MIN_BLUR_SIZE && h >= MIN_BLUR_SIZE) {
+      pushUndo(snapshotState());
+      blurRegions.push({ x, y, w, h, start: 0, end: null });
+      stopBlurDrawing();
+      renderBlurUI();
+      requestRedraw();
+    } else {
+      renderBlurRects();
+    }
+  };
+  layer.addEventListener('pointerup', finish);
+  layer.addEventListener('pointercancel', finish);
+}
+
+function renderBlurUI() {
+  renderBlurRects();
+  els.blurList.innerHTML = blurRegions.map((r, i) => {
+    const whole = !r.start && (r.end === null || r.end === undefined);
+    const range = whole
+      ? 'Whole clip'
+      : `${formatClock((r.start || 0) / 1000)} – ${r.end == null ? 'end' : formatClock(r.end / 1000)}`;
+    return `<div class="blur-item" data-index="${i}">
+      <span class="blur-item-label">Blur ${i + 1}<span class="blur-item-range">${range}</span></span>
+      <button class="icon-btn" data-action="start" title="Start at playhead">${iconSvg('start')}</button>
+      <button class="icon-btn" data-action="end" title="End at playhead">${iconSvg('end')}</button>
+      <button class="icon-btn" data-action="delete" title="Remove blur">${iconSvg('trash')}</button>
+    </div>`;
+  }).join('');
+}
+
+function renderBlurRects() {
+  const layer = els.blurLayer;
+  if (!layer) return;
+  const source = getSourceRect();
+  const toLayer = (r) => ({
+    left: ((r.x * videoWidth - source.x) / source.width) * 100,
+    top: ((r.y * videoHeight - source.y) / source.height) * 100,
+    width: ((r.w * videoWidth) / source.width) * 100,
+    height: ((r.h * videoHeight) / source.height) * 100
+  });
+  const rectHtml = (r, cls) => {
+    const p = toLayer(r);
+    return `<div class="blur-rect ${cls}" style="left:${p.left}%;top:${p.top}%;width:${p.width}%;height:${p.height}%"></div>`;
+  };
+  layer.innerHTML = blurRegions.map((r, i) => rectHtml(r, i === highlightedBlur ? 'highlight' : '')).join('') +
+    (blurDraft ? rectHtml(blurDraft, 'drafting') : '');
+}
+
+function setBlurHighlight(item) {
+  const index = item ? Number(item.dataset.index) : -1;
+  if (index === highlightedBlur) return;
+  highlightedBlur = index;
+  renderBlurRects();
+}
+
+function onBlurListClick(e) {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const index = Number(btn.closest('.blur-item').dataset.index);
+  const region = blurRegions[index];
+  if (!region) return;
+
+  pushUndo(snapshotState());
+  const now = els.video.currentTime * 1000;
+  if (btn.dataset.action === 'delete') {
+    blurRegions.splice(index, 1);
+    highlightedBlur = -1;
+  } else if (btn.dataset.action === 'start') {
+    region.start = now;
+    if (region.end != null && region.end <= now) region.end = null;
+  } else if (btn.dataset.action === 'end') {
+    region.end = now;
+    if ((region.start || 0) >= now) region.start = 0;
+  }
+  renderBlurUI();
+  requestRedraw();
+}
+
 // ========== TOAST ==========
 
 function showToast(message, type = 'error') {
@@ -1442,11 +1727,46 @@ function setupExportModal() {
   $('cancelExport').addEventListener('click', closeExportModal);
   document.querySelector('#exportModal .modal-backdrop').addEventListener('click', closeExportModal);
   $('confirmExport').addEventListener('click', doExport);
+
+  $('exportPreset').addEventListener('change', (e) => applyExportPreset(e.target.value));
+  $('exportFormat').addEventListener('change', updateExportFormatUI);
+  // Hand-editing any field means it's no longer a preset
+  ['exportFormat', 'exportResolution', 'exportQuality', 'gifWidth', 'gifFps'].forEach((id) => {
+    $(id).addEventListener('change', () => { $('exportPreset').value = 'custom'; });
+  });
+  updateExportFormatUI();
+}
+
+const VIDEO_EXPORT_INFO = 'Export renders in real time. Keep your device plugged in and this tab visible until it finishes. 4K upscaling is in beta.';
+const GIF_EXPORT_INFO = 'GIFs have no sound and grow quickly with length. Best for clips under 20 seconds. Export renders in real time.';
+
+function updateExportFormatUI() {
+  const isGif = $('exportFormat').value === 'gif';
+  document.querySelectorAll('#exportModal .gif-only').forEach((el) => el.classList.toggle('hidden', !isGif));
+  document.querySelectorAll('#exportModal .video-only').forEach((el) => el.classList.toggle('hidden', isGif));
+  $('exportInfoText').textContent = isGif ? GIF_EXPORT_INFO : VIDEO_EXPORT_INFO;
+}
+
+function applyExportPreset(name) {
+  const preset = exportPresets[name];
+  if (!preset) return;
+  if (preset.format) $('exportFormat').value = preset.format;
+  if (preset.resolution) $('exportResolution').value = preset.resolution;
+  if (preset.quality) $('exportQuality').value = preset.quality;
+  if (preset.gifWidth) $('gifWidth').value = preset.gifWidth;
+  if (preset.gifFps) $('gifFps').value = preset.gifFps;
+  if (preset.aspect && preset.aspect !== settings.aspectRatio) {
+    settings.aspectRatio = preset.aspect;
+    setChoice('aspectGroup', preset.aspect);
+    updateFrameSize();
+  }
+  updateExportFormatUI();
 }
 
 function setExportBusy(busy) {
   isExportProcessing = busy;
-  ['closeExportModal', 'cancelExport', 'confirmExport', 'exportResolution', 'exportFormat', 'exportQuality']
+  ['closeExportModal', 'cancelExport', 'confirmExport', 'exportPreset', 'exportResolution', 'exportFormat',
+    'exportQuality', 'gifWidth', 'gifFps']
     .forEach((id) => { $(id).disabled = busy; });
   $('exportProgress').classList.toggle('hidden', !busy);
   $('exportInfo').classList.toggle('hidden', busy);
@@ -1469,7 +1789,11 @@ function computeExportDimensions(resolution) {
   if (settings.aspectRatio !== 'native') {
     const [aw, ah] = settings.aspectRatio.split(':').map(Number);
     const target = aw / ah;
-    if (Math.abs(target - base.width / base.height) > 0.01) {
+    if (target <= 1 && resolution !== 'original') {
+      // Square and portrait: the "p" number is the short side (1080p 9:16 = 1080×1920)
+      width = base.height;
+      height = Math.round(base.height / target);
+    } else if (Math.abs(target - base.width / base.height) > 0.01) {
       const byHeight = { width: Math.round(base.height * target), height: base.height };
       const byWidth = { width: base.width, height: Math.round(base.width / target) };
       ({ width, height } = byHeight.width * byHeight.height >= byWidth.width * byWidth.height ? byHeight : byWidth);
@@ -1496,11 +1820,60 @@ function computeExportBitrate(resolution, quality, format, width, height) {
   return Math.min(bitrate, maxSafe);
 }
 
+// Samples finished export frames into an animated GIF
+function createGifCollector(gifWidth, fps) {
+  const interval = 1 / fps;
+  let encoder = null;
+  let scratch = null;
+  let scratchCtx = null;
+  let pending = null;            // Last sampled frame, written once we know its duration
+  let lastSample = -Infinity;
+
+  return {
+    onFrame(canvas, seconds) {
+      if (seconds - lastSample < interval - 0.002) return;
+      if (!encoder) {
+        const height = Math.max(2, Math.round((gifWidth * canvas.height) / canvas.width));
+        encoder = new GifEncoder(gifWidth, height);
+        scratch = document.createElement('canvas');
+        scratch.width = gifWidth;
+        scratch.height = height;
+        scratchCtx = scratch.getContext('2d', { willReadFrequently: true });
+        scratchCtx.imageSmoothingQuality = 'high';
+      }
+      scratchCtx.drawImage(canvas, 0, 0, scratch.width, scratch.height);
+      const data = scratchCtx.getImageData(0, 0, scratch.width, scratch.height).data;
+      if (pending) encoder.addFrame(pending.data, (seconds - pending.seconds) * 1000);
+      pending = { data, seconds };
+      lastSample = seconds;
+    },
+    finish() {
+      if (!encoder) throw new Error('No frames were rendered');
+      if (pending) encoder.addFrame(pending.data, interval * 1000);
+      return encoder.finish();
+    }
+  };
+}
+
+function downloadBlob(blob, extension) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `open-motions-${Date.now()}.${extension}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 async function doExport() {
   const confirmBtn = $('confirmExport');
-  const resolution = $('exportResolution').value || '1080p';
-  const format = $('exportFormat').value || 'mp4';
-  const quality = $('exportQuality').value || 'high';
+  const isGif = $('exportFormat').value === 'gif';
+  // GIFs render through a light 720p WebM pass, then get sampled and downscaled
+  const resolution = isGif ? '720p' : ($('exportResolution').value || '1080p');
+  const format = isGif ? 'webm' : ($('exportFormat').value || 'mp4');
+  const quality = isGif ? 'low' : ($('exportQuality').value || 'high');
+  const gif = isGif ? createGifCollector(Number($('gifWidth').value) || 640, Number($('gifFps').value) || 15) : null;
 
   if (!processor || typeof processor.processVideo !== 'function') {
     showToast('Video processor not initialized. Please refresh the page.', 'error');
@@ -1538,14 +1911,18 @@ async function doExport() {
       showBrowserFrame: settings.showBrowserFrame,
       taskbarCrop: getBottomCrop(),
       showShadow: settings.showShadow,
+      blurRegions: structuredClone(blurRegions),
+      cursor: { ...settings.cursor },
+      keystrokes: { ...settings.keystrokes },
+      onFrame: gif ? gif.onFrame : null,
       outputWidth: width,
       outputHeight: height,
       bitrate,
       format,
       quality,
-      // 1440p/4K are capped at 30 FPS for stable encoding
-      fps: highRes ? 30 : 60,
-      maxFps: highRes ? 30 : 60,
+      // 1440p/4K are capped at 30 FPS for stable encoding; GIFs never need more than 30
+      fps: highRes || isGif ? 30 : 60,
+      maxFps: highRes || isGif ? 30 : 60,
       sharpening: true,
       antiAlias: true,
       useWebCodecs: false
@@ -1567,17 +1944,21 @@ async function doExport() {
     );
     debugLog('[Editor] Output size:', (processed.size / 1024 / 1024).toFixed(2), 'MB');
 
-    setExportProgress(100, 'Saving…');
-    // The browser may fall back to WebM when MP4 recording isn't supported
-    const extension = format === 'mp4' && processed.type.includes('mp4') ? 'mp4' : 'webm';
-    const url = URL.createObjectURL(processed);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `open-motions-${Date.now()}.${extension}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    let extension;
+    if (gif) {
+      setExportProgress(100, 'Encoding GIF…');
+      // Let the status paint before the final (synchronous) write
+      await new Promise((r) => setTimeout(r, 30));
+      const gifBlob = gif.finish();
+      debugLog('[Editor] GIF size:', (gifBlob.size / 1024 / 1024).toFixed(2), 'MB');
+      extension = 'gif';
+      downloadBlob(gifBlob, extension);
+    } else {
+      setExportProgress(100, 'Saving…');
+      // The browser may fall back to WebM when MP4 recording isn't supported
+      extension = format === 'mp4' && processed.type.includes('mp4') ? 'mp4' : 'webm';
+      downloadBlob(processed, extension);
+    }
 
     setExportProgress(100, 'Export complete');
     confirmBtn.innerHTML = iconSvg('check') + 'Done';

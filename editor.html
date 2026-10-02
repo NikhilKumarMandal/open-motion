@@ -327,6 +327,105 @@
       height: 100%;
     }
 
+    /* Keystroke overlay (on the frame, not zoomed) */
+    .overlay-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    /* Blur areas: drawn on the preview, outlined while editing */
+    .blur-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .preview-area.drawing-blur .blur-layer {
+      pointer-events: auto;
+      cursor: crosshair;
+    }
+
+    .blur-rect {
+      position: absolute;
+      border: 1.5px dashed rgba(255, 255, 255, 0.9);
+      outline: 1px solid rgba(0, 0, 0, 0.35);
+      border-radius: 4px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .preview-area.drawing-blur .blur-rect,
+    .blur-rect.highlight {
+      opacity: 1;
+    }
+
+    .blur-rect.drafting {
+      opacity: 1;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .draw-hint {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--text-2);
+      font-size: 12px;
+      box-shadow: var(--shadow-lg);
+      z-index: 10;
+    }
+
+    .blur-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .blur-list:empty {
+      display: none;
+    }
+
+    .blur-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 4px 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .blur-item-label {
+      flex: 1;
+      min-width: 0;
+      font-size: 12px;
+    }
+
+    .blur-item-range {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    .blur-item .icon-btn {
+      width: 28px;
+      height: 28px;
+    }
+
+    .blur-item .icon-btn svg.icon {
+      width: 14px;
+      height: 14px;
+    }
+
     /* Empty state */
     .empty-state {
       display: flex;
@@ -1356,6 +1455,11 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+    <symbol id="i-mouse" viewBox="0 0 24 24"><path d="M4 4l7.07 17 2.51-7.39L21 11.07z"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M10 13h4M7 16h10"/></symbol>
+    <symbol id="i-blur" viewBox="0 0 24 24"><path d="M12 2.7 5.6 9.1a9 9 0 1 0 12.8 0z"/><path d="M8 14a4 4 0 0 0 4 4"/></symbol>
+    <symbol id="i-start" viewBox="0 0 24 24"><path d="M6 4v16"/><path d="m10 12 8-6v12z"/></symbol>
+    <symbol id="i-end" viewBox="0 0 24 24"><path d="M18 4v16"/><path d="m14 12-8-6v12z"/></symbol>
   </svg>
 
   <!-- Loading Overlay -->
@@ -1407,8 +1511,12 @@
         <div class="video-window" id="videoWindow">
           <video id="video" playsinline></video>
           <canvas id="previewCanvas"></canvas>
+          <div class="blur-layer" id="blurLayer"></div>
         </div>
+        <!-- Keystrokes sit on the frame, so they don't move with zoom -->
+        <canvas class="overlay-canvas" id="overlayCanvas"></canvas>
       </div>
+      <div class="draw-hint hidden" id="blurDrawHint">Drag over the area to blur · <kbd>Esc</kbd> to cancel</div>
     </main>
 
     <!-- Timeline -->
@@ -1551,7 +1659,14 @@
             <button data-value="deep" title="Deep">1.5×</button>
             <button data-value="maximum" title="Maximum">2×</button>
           </div>
-          <div class="field-hint">Changing depth regenerates zooms from your clicks.</div>
+          <div class="setting-row" style="margin-top: 10px;">
+            <span class="setting-label">Follow scrolling</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="zoomOnScroll" aria-label="Follow scrolling">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="field-hint">Changing depth or scrolling regenerates zooms from your clicks and scrolls.</div>
         </section>
 
         <!-- Click effects -->
@@ -1578,6 +1693,74 @@
             <button data-value="strong">Strong</button>
           </div>
         </section>
+
+        <!-- Cursor -->
+        <section class="panel-section">
+          <h3 class="section-title"><svg class="icon"><use href="#i-mouse"/></svg>Cursor</h3>
+          <div class="setting-row">
+            <span class="setting-label">Smooth cursor</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="cursorEnabled" aria-label="Smooth cursor">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="field-hint" id="cursorHint">Draws a smooth, larger cursor from your recorded mouse movement.</div>
+          <div class="field-label">Size</div>
+          <div class="segmented" id="cursorSizeGroup">
+            <button data-value="1">1×</button>
+            <button data-value="1.5">1.5×</button>
+            <button data-value="2">2×</button>
+            <button data-value="3">3×</button>
+          </div>
+          <div class="field-label">Smoothing</div>
+          <div class="segmented" id="cursorSmoothGroup">
+            <button data-value="low">Low</button>
+            <button data-value="medium">Medium</button>
+            <button data-value="high">High</button>
+          </div>
+          <div class="setting-row" style="margin-top: 10px;">
+            <span class="setting-label">Hide when idle</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="cursorHideIdle" aria-label="Hide cursor when idle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Keystrokes -->
+        <section class="panel-section">
+          <h3 class="section-title"><svg class="icon"><use href="#i-keyboard"/></svg>Keystrokes</h3>
+          <div class="setting-row">
+            <span class="setting-label">Show shortcuts</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="keysEnabled" aria-label="Show keystrokes">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="field-hint" id="keysHint">Shows shortcuts like Ctrl+K or Enter. Typing in text fields is never recorded.</div>
+          <div class="field-label">Size</div>
+          <div class="segmented" id="keysSizeGroup">
+            <button data-value="small">Small</button>
+            <button data-value="medium">Medium</button>
+            <button data-value="large">Large</button>
+          </div>
+          <div class="field-label">Position</div>
+          <div class="segmented" id="keysPositionGroup">
+            <button data-value="left">Left</button>
+            <button data-value="center">Center</button>
+            <button data-value="right">Right</button>
+          </div>
+        </section>
+
+        <!-- Blur -->
+        <section class="panel-section">
+          <h3 class="section-title"><svg class="icon"><use href="#i-blur"/></svg>Blur</h3>
+          <button id="addBlurBtn" class="btn btn-ghost btn-sm" style="width: 100%;">
+            <svg class="icon"><use href="#i-plus"/></svg>Blur an area
+          </button>
+          <div class="blur-list" id="blurList"></div>
+          <div class="field-hint">Hide emails, passwords or API keys. Use the arrows to start or end a blur at the playhead.</div>
+        </section>
       </div>
     </aside>
   </div>
@@ -1592,6 +1775,41 @@
       </div>
       <div class="modal-body">
         <div class="export-option">
+          <label class="export-label" for="exportPreset">Preset</label>
+          <select id="exportPreset" class="export-select">
+            <option value="custom" selected>Custom</option>
+            <option value="youtube">YouTube · 16:9 1080p MP4</option>
+            <option value="x">X / Twitter · 16:9 720p MP4</option>
+            <option value="linkedin">LinkedIn · 1:1 1080p MP4</option>
+            <option value="vertical">Reels / TikTok / Shorts · 9:16 1080p MP4</option>
+            <option value="readme">README / Slack · GIF 640px</option>
+          </select>
+        </div>
+        <div class="export-option">
+          <label class="export-label" for="exportFormat">Format</label>
+          <select id="exportFormat" class="export-select">
+            <option value="mp4" selected>MP4 (H.264)</option>
+            <option value="webm">WebM (VP9)</option>
+            <option value="gif">GIF (animated, no audio)</option>
+          </select>
+        </div>
+        <div class="export-option gif-only hidden">
+          <label class="export-label" for="gifWidth">GIF width</label>
+          <select id="gifWidth" class="export-select">
+            <option value="480">480 px · smallest</option>
+            <option value="640" selected>640 px</option>
+            <option value="800">800 px</option>
+            <option value="1024">1024 px · largest</option>
+          </select>
+        </div>
+        <div class="export-option gif-only hidden">
+          <label class="export-label" for="gifFps">GIF frame rate</label>
+          <select id="gifFps" class="export-select">
+            <option value="10">10 fps · smaller file</option>
+            <option value="15" selected>15 fps · smoother</option>
+          </select>
+        </div>
+        <div class="export-option video-only">
           <label class="export-label" for="exportResolution">Resolution</label>
           <select id="exportResolution" class="export-select">
             <option value="original">Original</option>
@@ -1602,14 +1820,7 @@
             <option value="480p">480p (854×480)</option>
           </select>
         </div>
-        <div class="export-option">
-          <label class="export-label" for="exportFormat">Format</label>
-          <select id="exportFormat" class="export-select">
-            <option value="mp4" selected>MP4 (H.264)</option>
-            <option value="webm">WebM (VP9)</option>
-          </select>
-        </div>
-        <div class="export-option">
+        <div class="export-option video-only">
           <label class="export-label" for="exportQuality">Quality</label>
           <select id="exportQuality" class="export-select">
             <option value="high" selected>High</option>
@@ -1620,7 +1831,7 @@
 
         <div class="export-info" id="exportInfo">
           <svg class="icon"><use href="#i-info"/></svg>
-          <span>Export renders in real time. Keep your device plugged in and this tab visible until it finishes. 4K upscaling is in beta.</span>
+          <span id="exportInfoText">Export renders in real time. Keep your device plugged in and this tab visible until it finishes. 4K upscaling is in beta.</span>
         </div>
 
         <div class="export-progress hidden" id="exportProgress">
@@ -1641,6 +1852,8 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="zoom-analyzer.js"></script>
+  <script src="overlay-renderer.js"></script>
+  <script src="gif-encoder.js"></script>
   <script src="video-processor.js"></script>
   <script src="editor.js"></script>
 </body>

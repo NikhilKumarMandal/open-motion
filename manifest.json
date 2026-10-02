@@ -40,7 +40,9 @@
         "zoom-analyzer.js",
         "video-processor.js",
         "recorder.js",
-        "content.js"
+        "content.js",
+        "overlay-renderer.js",
+        "gif-encoder.js"
       ],
       "matches": ["<all_urls>"]
     }
