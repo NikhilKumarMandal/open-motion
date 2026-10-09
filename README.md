@@ -94,7 +94,3 @@ Contributions are welcome! To get started:
 4. Open a pull request describing what you changed and why.
 
 Please report bugs and feature ideas through the issue tracker. For anything else, or if you need help, email [kumarnikhil48578@gmail.com](mailto:kumarnikhil48578@gmail.com).
-
-## License
-
-Released under the [MIT License](LICENSE). Based on CursorFly by Anu S Pillai.
