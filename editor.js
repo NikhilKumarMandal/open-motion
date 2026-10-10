@@ -72,9 +72,9 @@ const exportResolutions = {
 };
 
 const exportBitrates = {
-  high: 150000000,  // 150 Mbps base for 1080p
-  medium: 75000000,
-  low: 40000000
+  high: 20000000,   // 20 Mbps base for 1080p
+  medium: 12000000,
+  low: 6000000
 };
 
 const FRAME_PADDING = 24;         // Background padding around the video (px)
@@ -1828,7 +1828,7 @@ function computeExportBitrate(resolution, quality, format, width, height) {
 
   const bitrate = Math.round((exportBitrates[quality] || exportBitrates.high) * multiplier);
   // Browser-safe caps: H.264 encoders are more limited than VP9
-  const maxSafe = format === 'mp4' ? 150000000 : 250000000;
+  const maxSafe = format === 'mp4' ? 100000000 : 150000000;
   return Math.min(bitrate, maxSafe);
 }
 
@@ -1935,7 +1935,9 @@ async function doExport() {
       // 1440p/4K are capped at 30 FPS for stable encoding; GIFs never need more than 30
       fps: highRes || isGif ? 30 : 60,
       maxFps: highRes || isGif ? 30 : 60,
-      sharpening: true,
+      // ctx.filter forces a slower canvas compositing path per frame — skip it
+      // at low/medium quality where the difference isn't visible anyway
+      sharpening: quality === 'high',
       antiAlias: true,
       useWebCodecs: false
     };

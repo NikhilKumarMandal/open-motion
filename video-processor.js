@@ -490,14 +490,13 @@ class VideoProcessor {
         
         // Cap bitrate to browser-safe maximum before creating MediaRecorder
         // Different codecs have different limits:
-        // - VP9/WebM: Can handle up to ~250 Mbps
-        // - H.264/MP4: Often limited to ~100-150 Mbps in browsers
-        let MAX_SAFE_BITRATE = 250000000; // 250 Mbps default for VP9/WebM
-        
+        // - VP9/WebM: Can handle up to ~150 Mbps reliably in real time
+        // - H.264/MP4: Often limited to ~80-100 Mbps in browsers
+        let MAX_SAFE_BITRATE = 150000000; // 150 Mbps default for VP9/WebM
+
         // For H.264/MP4, use lower bitrate cap (browsers often struggle with high H.264 bitrates)
         if (recorderOptions.mimeType && (recorderOptions.mimeType.includes('mp4') || recorderOptions.mimeType.includes('avc1'))) {
-          // Slightly higher cap for 2K/4K MP4 — still within what Chrome typically accepts
-          MAX_SAFE_BITRATE = isHeavyResExport ? 180000000 : 150000000;
+          MAX_SAFE_BITRATE = isHeavyResExport ? 100000000 : 80000000;
         }
         
         if (bitrate > MAX_SAFE_BITRATE) {
@@ -556,10 +555,6 @@ class VideoProcessor {
         this.mediaRecorder.onstart = () => {
           debugLog('[VideoProcessor] MediaRecorder started successfully');
         };
-        
-        this.mediaRecorder.onstop = () => {
-          debugLog('[VideoProcessor] MediaRecorder stopped, total chunks:', this.chunks.length);
-        };
 
         // Seek to start and ensure video is ready
         this.video.currentTime = startTime;
@@ -600,19 +595,26 @@ class VideoProcessor {
         // Stop video
         this.video.pause();
         
-        // Ensure we get all data before stopping
+        // Stop and wait for the real 'stop' event (fires only after the final
+        // dataavailable has been delivered) instead of blind sleeps — resolves
+        // as soon as the encoder actually finishes, with a safety cap in case
+        // the event never fires on some browser/codec combination.
         if (this.mediaRecorder.state === 'recording') {
-            debugLog('[VideoProcessor] Requesting final data and stopping MediaRecorder...');
-            this.mediaRecorder.requestData();
-            // Wait a moment for data to be available
-            await new Promise(res => setTimeout(res, isHeavyResExport ? 400 : 200));
+          debugLog('[VideoProcessor] Stopping MediaRecorder and waiting for final data...');
+          await new Promise((resolve) => {
+            const safetyTimeout = setTimeout(() => {
+              debugLog('[VideoProcessor] Stop event safety timeout reached');
+              resolve();
+            }, isHeavyResExport ? 3000 : 1500);
+            this.mediaRecorder.onstop = () => {
+              clearTimeout(safetyTimeout);
+              debugLog('[VideoProcessor] MediaRecorder stopped, total chunks:', this.chunks.length);
+              resolve();
+            };
             this.mediaRecorder.stop();
+          });
         }
-        
-        // High-res exports need longer for the encoder to flush final samples
-        debugLog('[VideoProcessor] Waiting for final chunks...');
-        await new Promise(res => setTimeout(res, isHeavyResExport ? 2200 : 1000));
-        
+
         debugLog('[VideoProcessor] Total chunks collected:', this.chunks.length);
         
         const blob = new Blob(this.chunks, { type: this.mediaRecorder.mimeType || 'video/webm' });
