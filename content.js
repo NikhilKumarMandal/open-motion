@@ -18,7 +18,10 @@ if (window.__SCREEN_RECORDER_CONTENT_INJECTED__) {
   let lastSendTime = 0;
   let clickCount = 0;
   let moveCount = 0;
-  const SEND_INTERVAL = 50; // Send cursor data every 50ms (clicks are always sent immediately)
+  // The editor interpolates a smooth synthetic cursor between samples anyway, so
+  // raw position doesn't need to be dense — fewer messages means less main-thread
+  // work on this tab, which is exactly the tab being screen-captured for the recording.
+  const SEND_INTERVAL = 75; // Send cursor data every 75ms (clicks are always sent immediately)
   
   // Store handlers for visibility and focus events so they can be removed
   let visibilityChangeHandler = null;

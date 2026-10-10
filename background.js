@@ -178,35 +178,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   
-  // Legacy: Start recording with desktopCapture
-  if (message.action === 'startRecording') {
-    startRecording(message.tabId, message.settings)
-      .then(result => sendResponse(result))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-  
   if (message.action === 'stopRecording') {
     stopRecording()
       .then(result => sendResponse(result))
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
-  
-  if (message.action === 'pauseRecording') {
-    pauseRecording()
-      .then(() => sendResponse({ success: true }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-  
-  if (message.action === 'resumeRecording') {
-    resumeRecording()
-      .then(() => sendResponse({ success: true }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
-    return true;
-  }
-  
+
   if (message.action === 'cursorMove') {
     if (!isRecording) {
       console.log('[Background] Ignoring cursor move - not recording');
@@ -360,131 +338,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Legacy: Start recording using desktopCapture
-async function startRecording(tabId, settings) {
-  try {
-    console.log('[Background] startRecording called with tabId:', tabId);
-    
-    if (isRecording) {
-      throw new Error('Recording already in progress');
-    }
-    
-    const tab = await chrome.tabs.get(tabId);
-    console.log('[Background] Got tab:', tab.id, tab.url);
-    
-    if (isUnsupportedWebsite(tab.url)) {
-      throw new Error('Cannot record from Chrome system pages.');
-    }
-    
-    console.log('[Background] Showing screen picker...');
-    const streamId = await new Promise((resolve, reject) => {
-      chrome.desktopCapture.chooseDesktopMedia(
-        ['screen', 'window', 'tab'],
-        tab,
-        (streamId) => {
-          if (!streamId) {
-            reject(new Error('User cancelled screen capture'));
-            return;
-          }
-          resolve(streamId);
-        }
-      );
-    });
-    
-    if (!streamId) {
-      throw new Error('No stream ID received');
-    }
-    
-    console.log('[Background] Got streamId:', streamId);
-    
-    recordingTabId = tabId;
-    
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ['recorder.js']
-      });
-      console.log('[Background] Recorder script injected');
-    } catch (error) {
-      console.error('[Background] Failed to inject recorder script:', error);
-      throw new Error('Failed to start recording: ' + error.message);
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    const response = await chrome.tabs.sendMessage(tabId, {
-      action: 'startRecordingInTab',
-      streamId: streamId,
-      settings: settings
-    });
-    
-    if (!response || !response.success) {
-      throw new Error(response?.error || 'Failed to start recording in tab');
-    }
-    
-    isRecording = true;
-    isPaused = false;
-    cursorData = [];
-    recordingStartTime = Date.now();
-    videoDataReady = false;
-    cursorDataReady = false;
-    storedVideoData = null;
-    videoStoredInIndexedDB = false;
-    
-    await chrome.storage.local.set({ isRecording: true, isPaused: false });
-    
-    // Update icon to show recording state
-    updateRecordingIcon(true, false);
-    
-    if (settings.trackCursor) {
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          files: ['content.js']
-        });
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await chrome.tabs.sendMessage(tabId, { action: 'startTracking' });
-        console.log('[Background] Cursor tracking enabled');
-      } catch (error) {
-        console.warn('[Background] Could not enable cursor tracking:', error);
-      }
-    }
-    
-    return { success: true };
-  } catch (error) {
-    console.error('[Background] Error starting recording:', error);
-    return { success: false, error: error.message };
-  }
-}
-
+// The live flow (record.html) owns its own MediaRecorder and reports completion
+// via the 'recordingStopped' message, so stopping here is just local cleanup —
+// there is no in-tab recorder to notify.
 async function stopRecording() {
   try {
     console.log('[Background] Stopping recording...');
-    
+
     if (!isRecording) {
       return { success: false, error: 'No active recording' };
     }
-    
-    if (recordingTabId) {
-      try {
-        const tab = await chrome.tabs.get(recordingTabId).catch(() => null);
-        
-        if (tab) {
-          await chrome.tabs.sendMessage(recordingTabId, {
-            action: 'stopRecordingInTab'
-          });
-          console.log('[Background] Stop message sent');
-        } else {
-          await handleRecordingStoppedLocally();
-        }
-      } catch (error) {
-        console.warn('[Background] Could not communicate with tab:', error.message);
-        await handleRecordingStoppedLocally();
-      }
-    } else {
-      await handleRecordingStoppedLocally();
-    }
-    
+
+    await handleRecordingStoppedLocally();
     return { success: true };
   } catch (error) {
     console.error('[Background] Error stopping recording:', error);
@@ -521,40 +386,6 @@ async function handleRecordingStoppedLocally() {
   
   // Update icon to clear recording state
   updateRecordingIcon(false);
-}
-
-async function pauseRecording() {
-  if (isRecording && !isPaused && recordingTabId) {
-    try {
-      await chrome.tabs.sendMessage(recordingTabId, { action: 'pauseRecordingInTab' });
-      isPaused = true;
-      await chrome.storage.local.set({ isPaused: true });
-      // Update icon to show paused state
-      updateRecordingIcon(true, true);
-    } catch (error) {
-      isPaused = true;
-      await chrome.storage.local.set({ isPaused: true });
-      // Update icon to show paused state
-      updateRecordingIcon(true, true);
-    }
-  }
-}
-
-async function resumeRecording() {
-  if (isRecording && isPaused && recordingTabId) {
-    try {
-      await chrome.tabs.sendMessage(recordingTabId, { action: 'resumeRecordingInTab' });
-      isPaused = false;
-      await chrome.storage.local.set({ isPaused: false });
-      // Update icon to show active recording state
-      updateRecordingIcon(true, false);
-    } catch (error) {
-      isPaused = false;
-      await chrome.storage.local.set({ isPaused: false });
-      // Update icon to show active recording state
-      updateRecordingIcon(true, false);
-    }
-  }
 }
 
 async function saveCursorData() {
@@ -909,71 +740,30 @@ function injectCameraOverlayScript() {
     }
     
     
+    // Frames arrive by push (one message per captured frame) — no polling loop.
+    // Setting img.src directly (no clear-then-reset) avoids a redundant extra
+    // decode/reflow per frame, which matters since this runs on the exact tab
+    // whose pixels are being screen-captured for the recording.
     const messageListener = (message, sender, sendResponse) => {
-      
-      if (message.action === 'updateCameraFrame' && message.frameData) {
-        // Only update if frame data has changed (avoid unnecessary updates)
-        if (lastFrameData !== message.frameData) {
-          lastFrameData = message.frameData;
-          
-          // Force image reload by clearing src first, then setting new src
-          // This ensures the browser always loads the new frame
-          img.src = '';
-          
-          // Use requestAnimationFrame to ensure DOM update happens before setting new src
-          requestAnimationFrame(() => {
-            img.src = message.frameData;
-          });
-          
-          console.log('[CameraOverlay] Frame updated');
-        }
+      if (message.action === 'updateCameraFrame' && message.frameData && message.frameData !== lastFrameData) {
+        lastFrameData = message.frameData;
+        img.src = message.frameData;
       }
       return true;
     };
-    
+
     window.__cameraOverlayMessageListener = messageListener;
     chrome.runtime.onMessage.addListener(messageListener);
-    
-    // Request initial frame from background script and set up periodic frame requests
-    const requestFrame = () => {
-      chrome.runtime.sendMessage({ action: 'getCameraFrame' }, (response) => {
-        // Check for errors
-        if (chrome.runtime.lastError) {
-          // Silently fail - frames will come via message listener
-          return;
-        }
-        
-        if (response && response.frameData) {
-          // Always update if we have frame data (periodic requests ensure fresh frames)
-          // Don't check lastFrameData here - let the message listener handle deduplication
-          // This ensures frames are always fresh even if message listener fails
-          img.src = '';
-          requestAnimationFrame(() => {
-            img.src = response.frameData;
-            lastFrameData = response.frameData; // Update tracking
-            console.log('[CameraOverlay] Frame updated from periodic request');
-          });
-        }
-      });
-    };
-    
-    // Request initial frame immediately
-    requestFrame();
-    
-    // Also set up periodic requests as fallback (every 100ms) in case message listener fails
-    // This ensures frames are always updated even if message listener has issues
-    const frameRequestInterval = setInterval(() => {
-      const overlay = document.getElementById('open-motions-camera-overlay');
-      if (overlay) {
-        requestFrame();
-      } else {
-        clearInterval(frameRequestInterval);
-        window.__cameraOverlayFrameRequestInterval = null;
+
+    // Pull the latest known frame once on (re-)injection, so the bubble isn't
+    // blank until the next frame is pushed (e.g. right after a page navigation).
+    chrome.runtime.sendMessage({ action: 'getCameraFrame' }, (response) => {
+      if (chrome.runtime.lastError) return;
+      if (response && response.frameData && response.frameData !== lastFrameData) {
+        lastFrameData = response.frameData;
+        img.src = response.frameData;
       }
-    }, 100); // Increased frequency for smoother updates
-    
-    // Store interval for cleanup
-    window.__cameraOverlayFrameRequestInterval = frameRequestInterval;
+    });
   } catch (error) {
     console.error('[CameraOverlay] Error in injection script:', error);
   }

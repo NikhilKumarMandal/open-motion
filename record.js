@@ -326,21 +326,21 @@ async function selectScreen() {
     // Note: This may not work on all platforms/browsers
     if ('systemAudio' in navigator.mediaDevices.getDisplayMedia) {
       displayMediaOptions.systemAudio = 'include';
-      console.log('[Record] systemAudio: include is supported');
+      debugLog('[Record] systemAudio: include is supported');
     } else {
-      console.log('[Record] systemAudio option not available, using standard audio capture');
+      debugLog('[Record] systemAudio option not available, using standard audio capture');
     }
     
     mediaStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
 
-    console.log('[Record] Screen selected!');
-    console.log('[Record] Video tracks:', mediaStream.getVideoTracks().length);
-    console.log('[Record] Audio tracks:', mediaStream.getAudioTracks().length);
+    debugLog('[Record] Screen selected!');
+    debugLog('[Record] Video tracks:', mediaStream.getVideoTracks().length);
+    debugLog('[Record] Audio tracks:', mediaStream.getAudioTracks().length);
 
     // Get video track settings
     const videoTrack = mediaStream.getVideoTracks()[0];
     const settings = videoTrack.getSettings();
-    console.log('[Record] Video settings:', settings);
+    debugLog('[Record] Video settings:', settings);
 
     // Log audio track information if present
     // Following the article's approach: verify audio tracks are captured
@@ -348,12 +348,12 @@ async function selectScreen() {
     if (audioTracks.length > 0) {
       audioTracks.forEach((track, index) => {
         const audioSettings = track.getSettings();
-        console.log(`[Record] Audio track ${index + 1} settings:`, audioSettings);
-        console.log(`[Record] Audio track ${index + 1} label:`, track.label);
-        console.log(`[Record] Audio track ${index + 1} enabled:`, track.enabled);
-        console.log(`[Record] Audio track ${index + 1} kind:`, track.kind);
+        debugLog(`[Record] Audio track ${index + 1} settings:`, audioSettings);
+        debugLog(`[Record] Audio track ${index + 1} label:`, track.label);
+        debugLog(`[Record] Audio track ${index + 1} enabled:`, track.enabled);
+        debugLog(`[Record] Audio track ${index + 1} kind:`, track.kind);
       });
-      console.log('[Record] ✅ System/tab audio will be recorded');
+      debugLog('[Record] ✅ System/tab audio will be recorded');
     }
 
     // Only trust the setting the browser actually applied
@@ -379,7 +379,7 @@ async function selectScreen() {
 
     // Handle stream ending (user clicked stop sharing)
     mediaStream.getVideoTracks()[0].onended = () => {
-      console.log('[Record] Stream ended by user');
+      debugLog('[Record] Stream ended by user');
       resetUI();
     };
 
@@ -417,7 +417,7 @@ async function enableCameraVideo() {
       audio: false
     });
 
-    console.log('[Record] Camera (overlay) enabled, video tracks:', cameraVideoStream.getVideoTracks().length);
+    debugLog('[Record] Camera (overlay) enabled, video tracks:', cameraVideoStream.getVideoTracks().length);
 
     enableCameraBtn.innerHTML = '<span class="btn-icon">✅</span> Camera enabled';
     enableCameraBtn.classList.remove('btn-outline');
@@ -425,7 +425,7 @@ async function enableCameraVideo() {
     enableCameraBtn.disabled = true;
 
     cameraVideoStream.getVideoTracks()[0].onended = () => {
-      console.log('[Record] Camera video ended by user');
+      debugLog('[Record] Camera video ended by user');
       if (cameraVideoStream) {
         cameraVideoStream.getTracks().forEach((t) => t.stop());
         cameraVideoStream = null;
@@ -479,15 +479,15 @@ async function enableMicrophone() {
 
     if (noiseSuppressionCheckbox) noiseSuppressionCheckbox.disabled = true;
 
-    console.log('[Record] Microphone enabled, audio tracks:', micStream.getAudioTracks().length, '- noise suppression:', noiseSuppression);
+    debugLog('[Record] Microphone enabled, audio tracks:', micStream.getAudioTracks().length, '- noise suppression:', noiseSuppression);
     micStream.getAudioTracks().forEach((track, i) => {
       const settings = track.getSettings();
-      console.log(`[Record] Microphone ${i + 1}:`, {
+      debugLog(`[Record] Microphone ${i + 1}:`, {
         sampleRate: settings.sampleRate,
         channelCount: settings.channelCount
       });
       track.onended = () => {
-        console.log('[Record] Microphone track ended by user');
+        debugLog('[Record] Microphone track ended by user');
         if (micStream) {
           micStream.getTracks().forEach((t) => t.stop());
           micStream = null;
@@ -572,7 +572,7 @@ async function startRecording() {
   
   // Clean up any previous recording resources
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    console.log('[Record] Cleaning up previous MediaRecorder before starting new recording');
+    debugLog('[Record] Cleaning up previous MediaRecorder before starting new recording');
     try {
       mediaRecorder.stop();
     } catch (e) {
@@ -590,7 +590,7 @@ async function startRecording() {
   // Check for unsupported website BEFORE starting recording
   try {
     const tab = await chrome.tabs.get(tabId);
-    console.log('[Record] Checking target tab before recording:', tab.url);
+    debugLog('[Record] Checking target tab before recording:', tab.url);
     
     if (isUnsupportedWebsite(tab.url)) {
       console.warn('[Record] ⚠️ Unsupported website detected, showing modal');
@@ -605,7 +605,7 @@ async function startRecording() {
   }
 
   try {
-    console.log('[Record] Starting recording...');
+    debugLog('[Record] Starting recording...');
     startRecordingBtn.disabled = true;
     startRecordingBtn.innerHTML = '<span class="btn-icon">⏳</span> Starting...';
 
@@ -613,14 +613,14 @@ async function startRecording() {
     try {
       const tab = await chrome.tabs.get(tabId);
       if (isUnsupportedWebsite(tab.url)) {
-        console.log('[Record] Unsupported website detected, showing modal');
+        debugLog('[Record] Unsupported website detected, showing modal');
         showUnsupportedModal(tab.url);
         startRecordingBtn.disabled = false;
         startRecordingBtn.innerHTML = '<span class="btn-icon">🎬</span> Start recording';
         return;
       }
     } catch (error) {
-      console.log('[Record] Could not check tab, proceeding anyway');
+      debugLog('[Record] Could not check tab, proceeding anyway');
     }
 
     // SECOND: Tell background we're starting (sets isRecording = true)
@@ -649,8 +649,10 @@ async function startRecording() {
           
           if (window.cameraFrameVideo.readyState >= 2) {
             window.cameraFrameCtx.drawImage(window.cameraFrameVideo, 0, 0, window.cameraFrameCanvas.width, window.cameraFrameCanvas.height);
-            // Use higher quality JPEG for better overlay appearance
-            const dataUrl = window.cameraFrameCanvas.toDataURL('image/jpeg', 0.92);
+            // Lower quality is fine for a small PiP bubble, and keeps each relayed
+            // message (background -> recorded tab) small — this is overhead paid
+            // on the tab actually being screen-captured, so smaller/less-frequent wins.
+            const dataUrl = window.cameraFrameCanvas.toDataURL('image/jpeg', 0.75);
             chrome.runtime.sendMessage({
               action: 'updateCameraFrame',
               frameData: dataUrl
@@ -659,9 +661,10 @@ async function startRecording() {
             });
           }
         };
-        
-        // Capture at ~20 FPS for smooth overlay (every ~50ms) - better frame rate for smoother appearance
-        window.cameraFrameSender = setInterval(captureFrame, 50);
+
+        // A webcam PiP bubble doesn't need high fps; 10fps halves the relay/decode
+        // cost on the recorded tab versus the previous 20fps without looking choppy.
+        window.cameraFrameSender = setInterval(captureFrame, 100);
         // Wait a bit before capturing first frame to ensure video is ready
         setTimeout(() => {
           captureFrame(); // Initial frame
@@ -695,7 +698,7 @@ async function startRecording() {
       throw new Error(response.error || 'Failed to start recording');
     }
     
-    console.log('[Record] Background acknowledged, isRecording is now true');
+    debugLog('[Record] Background acknowledged, isRecording is now true');
 
     // THIRD: Inject content script for cursor tracking (AFTER isRecording is set)
     const trackingResult = await injectCursorTracking();
@@ -732,7 +735,7 @@ async function startRecording() {
     }
 
     // FOURTH: Switch to original tab FIRST (before starting recording)
-    console.log('[Record] Switching to original tab:', tabId);
+    debugLog('[Record] Switching to original tab:', tabId);
     try {
       await chrome.tabs.update(tabId, { active: true });
       // Wait for tab to be fully active and visible
@@ -753,7 +756,7 @@ async function startRecording() {
 
     // FIFTH: Sync recording start time right before MediaRecorder starts
     // This ensures cursor timestamps align perfectly with video timestamps
-    console.log('[Record] Syncing recording start time with MediaRecorder start');
+    debugLog('[Record] Syncing recording start time with MediaRecorder start');
     try {
       await chrome.runtime.sendMessage({ action: 'syncRecordingStartTime' });
     } catch (e) {
@@ -777,7 +780,7 @@ async function startRecording() {
     // Do NOT show camera overlay here - it's handled by background script injection
 
   } catch (error) {
-    console.log('[Record] Start recording error:', error);
+    debugLog('[Record] Start recording error:', error);
     
     startRecordingBtn.disabled = false;
     startRecordingBtn.innerHTML = '<span class="btn-icon">🎬</span> Start recording';
@@ -794,33 +797,33 @@ async function injectCursorTracking() {
   try {
     // Check if target tab is accessible
     const tab = await chrome.tabs.get(tabId);
-    console.log('[Record] Target tab URL:', tab.url);
+    debugLog('[Record] Target tab URL:', tab.url);
     
     // Check if it's a restricted URL
     if (isUnsupportedWebsite(tab.url)) {
-      console.log('[Record] Unsupported website detected');
+      debugLog('[Record] Unsupported website detected');
       // Return a special indicator instead of throwing
       return { unsupported: true, url: tab.url };
     }
     
     // Inject content script
-    console.log('[Record] Injecting content script into tab:', tabId);
+    debugLog('[Record] Injecting content script into tab:', tabId);
     await chrome.scripting.executeScript({
       target: { tabId: tabId },
       files: ['content.js']
     });
-    console.log('[Record] ✅ Content script injected');
+    debugLog('[Record] ✅ Content script injected');
     
     // Wait for script to load
     await new Promise(resolve => setTimeout(resolve, 300));
     
     // Start tracking
-    console.log('[Record] Sending startTracking message...');
+    debugLog('[Record] Sending startTracking message...');
     const trackingResponse = await chrome.tabs.sendMessage(tabId, { action: 'startTracking' });
-    console.log('[Record] ✅ Cursor tracking started, response:', trackingResponse);
+    debugLog('[Record] ✅ Cursor tracking started, response:', trackingResponse);
     
   } catch (error) {
-    console.log('[Record] Could not inject content script:', error.message);
+    debugLog('[Record] Could not inject content script:', error.message);
     
     // If it's a "cannot be scripted" error, it's likely an unsupported website
     if (error.message && (error.message.includes('cannot be scripted') || error.message.includes('extensions gallery'))) {
@@ -834,7 +837,7 @@ async function injectCursorTracking() {
     }
     
     // For other errors, just continue without cursor tracking
-    console.log('[Record] Continuing without cursor tracking');
+    debugLog('[Record] Continuing without cursor tracking');
     return { unsupported: false };
   }
 }
@@ -864,7 +867,7 @@ async function startLocalRecording() {
   for (const codec of codecs) {
     if (MediaRecorder.isTypeSupported(codec)) {
       selectedCodec = codec;
-      console.log('[Record] Using codec:', codec);
+      debugLog('[Record] Using codec:', codec);
       break;
     }
   }
@@ -878,29 +881,29 @@ async function startLocalRecording() {
   if (hasMicForRecording()) {
     const micAudioTracks = micStream.getAudioTracks();
     if (micAudioTracks.length > 0) {
-      console.log('[Record] Adding microphone audio track(s) to recording stream');
+      debugLog('[Record] Adding microphone audio track(s) to recording stream');
       const combinedStream = new MediaStream();
       videoTracks.forEach((track) => combinedStream.addTrack(track));
       audioTracks.forEach((track) => combinedStream.addTrack(track));
       micAudioTracks.forEach((track) => {
         combinedStream.addTrack(track);
-        console.log('[Record] Added mic track:', track.label, track.id);
+        debugLog('[Record] Added mic track:', track.label, track.id);
       });
       mediaStream = combinedStream;
       audioTracks = mediaStream.getAudioTracks();
-      console.log('[Record] Combined stream has', audioTracks.length, 'audio track(s)');
+      debugLog('[Record] Combined stream has', audioTracks.length, 'audio track(s)');
     }
   }
   
   const hasAudioTracks = audioTracks.length > 0;
   
-  console.log('[Record] MediaRecorder setup:');
-  console.log('[Record] - Video tracks:', videoTracks.length);
-  console.log('[Record] - Audio tracks:', audioTracks.length);
+  debugLog('[Record] MediaRecorder setup:');
+  debugLog('[Record] - Video tracks:', videoTracks.length);
+  debugLog('[Record] - Audio tracks:', audioTracks.length);
   
   if (hasAudioTracks) {
     audioTracks.forEach((track, i) => {
-      console.log(`[Record] - Audio track ${i + 1}:`, {
+      debugLog(`[Record] - Audio track ${i + 1}:`, {
         label: track.label,
         enabled: track.enabled,
         muted: track.muted,
@@ -932,7 +935,7 @@ async function startLocalRecording() {
   for (const codec of codecsToTry) {
     if (MediaRecorder.isTypeSupported(codec)) {
       selectedMimeType = codec;
-      console.log('[Record] Selected codec:', codec, hasAudioTracks ? '(with audio support)' : '(video only)');
+      debugLog('[Record] Selected codec:', codec, hasAudioTracks ? '(with audio support)' : '(video only)');
       break;
     }
   }
@@ -947,12 +950,12 @@ async function startLocalRecording() {
   // 192 kbps provides near-transparent quality for voice and music
   if (hasAudioTracks) {
     options.audioBitsPerSecond = 192000; // 192 kbps for high-quality audio (increased from 128 kbps)
-    console.log('[Record] Audio bitrate set to 192 kbps (high quality)');
+    debugLog('[Record] Audio bitrate set to 192 kbps (high quality)');
     
     // Log audio track settings for quality verification
     audioTracks.forEach((track, i) => {
       const settings = track.getSettings();
-      console.log(`[Record] Audio track ${i + 1} quality settings:`, {
+      debugLog(`[Record] Audio track ${i + 1} quality settings:`, {
         sampleRate: settings.sampleRate,
         channelCount: settings.channelCount,
         echoCancellation: settings.echoCancellation,
@@ -962,8 +965,8 @@ async function startLocalRecording() {
     });
   }
   
-  console.log('[Record] Final MediaRecorder options:', options);
-  console.log('[Record] Stream will be recorded with:', {
+  debugLog('[Record] Final MediaRecorder options:', options);
+  debugLog('[Record] Stream will be recorded with:', {
     videoTracks: videoTracks.length,
     audioTracks: audioTracks.length,
     mimeType: options.mimeType
@@ -991,7 +994,7 @@ async function startLocalRecording() {
   mediaRecorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) {
       recordedChunks.push(event.data);
-      console.log('[Record] Data chunk:', event.data.size, 'bytes', `(total: ${recordedChunks.length} chunks)`);
+      debugLog('[Record] Data chunk:', event.data.size, 'bytes', `(total: ${recordedChunks.length} chunks)`);
     }
   };
   
@@ -1008,16 +1011,16 @@ async function startLocalRecording() {
   const finalHasAudioTracks = hasAudioTracks;
   
   mediaRecorder.onstop = async () => {
-    console.log('[Record] MediaRecorder stopped. Total chunks:', recordedChunks.length);
-    console.log('[Record] MediaRecorder state:', mediaRecorder.state);
+    debugLog('[Record] MediaRecorder stopped. Total chunks:', recordedChunks.length);
+    debugLog('[Record] MediaRecorder state:', mediaRecorder.state);
     
     // Wait a bit for any final data chunks
     await new Promise(resolve => setTimeout(resolve, 500));
     
     // Verify we have data
     const totalSize = recordedChunks.reduce((sum, chunk) => sum + chunk.size, 0);
-    console.log('[Record] Total recorded data:', totalSize, 'bytes', `(${(totalSize / 1024 / 1024).toFixed(2)} MB)`);
-    console.log('[Record] Chunk details:', recordedChunks.map((c, i) => `Chunk ${i + 1}: ${c.size} bytes`));
+    debugLog('[Record] Total recorded data:', totalSize, 'bytes', `(${(totalSize / 1024 / 1024).toFixed(2)} MB)`);
+    debugLog('[Record] Chunk details:', recordedChunks.map((c, i) => `Chunk ${i + 1}: ${c.size} bytes`));
     
     if (totalSize === 0 || recordedChunks.length === 0) {
       console.error('[Record] ⚠️ ERROR: No data recorded!');
@@ -1043,8 +1046,8 @@ async function startLocalRecording() {
     }
     
     const blob = new Blob(recordedChunks, { type: selectedMimeType });
-    console.log('[Record] Created blob:', blob.size, 'bytes', `(${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
-    console.log('[Record] Blob type:', blob.type);
+    debugLog('[Record] Created blob:', blob.size, 'bytes', `(${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+    debugLog('[Record] Blob type:', blob.type);
     
     // Verify blob is valid
     if (blob.size === 0) {
@@ -1058,11 +1061,11 @@ async function startLocalRecording() {
       const firstBytes = await blob.slice(0, 4).arrayBuffer();
       const view = new Uint8Array(firstBytes);
       const magicBytes = Array.from(view).map(b => b.toString(16).padStart(2, '0')).join(' ');
-      console.log('[Record] Blob first 4 bytes (hex):', magicBytes);
+      debugLog('[Record] Blob first 4 bytes (hex):', magicBytes);
       
       // WebM files should start with 0x1A 0x45 0xDF 0xA3 (EBML header)
       if (view[0] === 0x1A && view[1] === 0x45 && view[2] === 0xDF && view[3] === 0xA3) {
-        console.log('[Record] ✅ Blob has valid WebM magic bytes');
+        debugLog('[Record] ✅ Blob has valid WebM magic bytes');
       } else {
         console.warn('[Record] ⚠️ Blob does not have valid WebM magic bytes! This may indicate corruption.');
       }
@@ -1070,7 +1073,7 @@ async function startLocalRecording() {
     
     // Log final audio track status
     if (finalHasAudioTracks) {
-      console.log('[Record] Final audio track status:');
+      debugLog('[Record] Final audio track status:');
       finalAudioTracks.forEach((track, i) => {
         const trackInfo = {
           label: track.label,
@@ -1078,7 +1081,7 @@ async function startLocalRecording() {
           muted: track.muted,
           readyState: track.readyState
         };
-        console.log(`[Record] - Audio track ${i + 1}:`, trackInfo);
+        debugLog(`[Record] - Audio track ${i + 1}:`, trackInfo);
       });
     }
     
@@ -1088,11 +1091,11 @@ async function startLocalRecording() {
   // Start recording
   try {
     mediaRecorder.start(100); // Collect data every 100ms
-    console.log('[Record] MediaRecorder.start() called');
+    debugLog('[Record] MediaRecorder.start() called');
     
     // Verify it actually started
     if (mediaRecorder.state === 'recording') {
-      console.log('[Record] ✅ MediaRecorder is recording!');
+      debugLog('[Record] ✅ MediaRecorder is recording!');
     } else {
       console.warn('[Record] ⚠️ MediaRecorder state after start:', mediaRecorder.state);
     }
@@ -1100,7 +1103,7 @@ async function startLocalRecording() {
     // Monitor for errors during recording
     setTimeout(() => {
       if (mediaRecorder.state === 'recording') {
-        console.log('[Record] MediaRecorder still recording after 1 second');
+        debugLog('[Record] MediaRecorder still recording after 1 second');
         if (recordedChunks.length === 0) {
           console.warn('[Record] ⚠️ No data chunks received yet - this may be normal for very short recordings');
         }
@@ -1142,8 +1145,8 @@ async function storeVideoInIndexedDB(videoId, blob) {
 
 async function saveRecording(blob) {
   try {
-    console.log('[Record] Saving recording...');
-    console.log('[Record] Blob to save:', blob.size, 'bytes', `(${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+    debugLog('[Record] Saving recording...');
+    debugLog('[Record] Blob to save:', blob.size, 'bytes', `(${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
     
     // Validate blob
     if (!blob || blob.size === 0) {
@@ -1163,7 +1166,7 @@ async function saveRecording(blob) {
       }
     }
     
-    console.log('[Record] Video dimensions:', videoWidth, 'x', videoHeight);
+    debugLog('[Record] Video dimensions:', videoWidth, 'x', videoHeight);
     
     // Check if video is too large for message passing
     // Base64 encoding increases size by ~33%, so we need to account for that
@@ -1173,13 +1176,13 @@ async function saveRecording(blob) {
     const useIndexedDB = blob.size > MAX_MESSAGE_SIZE;
     
     if (useIndexedDB) {
-      console.log('[Record] Video is large (' + (blob.size / 1024 / 1024).toFixed(2) + ' MB), using IndexedDB for storage...');
+      debugLog('[Record] Video is large (' + (blob.size / 1024 / 1024).toFixed(2) + ' MB), using IndexedDB for storage...');
       
       // Store video in IndexedDB and send reference
       const videoId = 'video_' + Date.now();
       await storeVideoInIndexedDB(videoId, blob);
       
-      console.log('[Record] Video stored in IndexedDB with ID:', videoId);
+      debugLog('[Record] Video stored in IndexedDB with ID:', videoId);
       
       // Send reference to background
       const storeResponse = await chrome.runtime.sendMessage({
@@ -1198,12 +1201,12 @@ async function saveRecording(blob) {
       }
     } else {
       // Small video - use existing base64 method
-      console.log('[Record] Converting blob to base64...');
+      debugLog('[Record] Converting blob to base64...');
       const reader = new FileReader();
       const blobData = await new Promise((resolve, reject) => {
         reader.onload = () => {
           const result = reader.result;
-          console.log('[Record] Base64 conversion complete, data URL length:', result.length);
+          debugLog('[Record] Base64 conversion complete, data URL length:', result.length);
           resolve(result);
         };
         reader.onerror = (error) => {
@@ -1221,13 +1224,13 @@ async function saveRecording(blob) {
       // Check if base64 data is too large (64MB limit for Chrome messages)
       const MAX_MESSAGE_SIZE_BYTES = 64 * 1024 * 1024; // 64MB in bytes
       if (blobData.length > MAX_MESSAGE_SIZE_BYTES) {
-        console.log('[Record] Base64 data too large (' + (blobData.length / 1024 / 1024).toFixed(2) + ' MB), switching to IndexedDB...');
+        debugLog('[Record] Base64 data too large (' + (blobData.length / 1024 / 1024).toFixed(2) + ' MB), switching to IndexedDB...');
         
         // Fallback to IndexedDB
         const videoId = 'video_' + Date.now();
         await storeVideoInIndexedDB(videoId, blob);
         
-        console.log('[Record] Video stored in IndexedDB with ID:', videoId);
+        debugLog('[Record] Video stored in IndexedDB with ID:', videoId);
         
         // Send reference to background
         const storeResponse = await chrome.runtime.sendMessage({
@@ -1245,7 +1248,7 @@ async function saveRecording(blob) {
           throw new Error('Failed to store video reference in background: ' + (storeResponse?.error || 'Unknown error'));
         }
       } else {
-        console.log('[Record] Sending video to background...');
+        debugLog('[Record] Sending video to background...');
         
         // Store in background
         const storeResponse = await chrome.runtime.sendMessage({
@@ -1265,7 +1268,7 @@ async function saveRecording(blob) {
       }
     }
     
-    console.log('[Record] ✅ Video stored successfully!');
+    debugLog('[Record] ✅ Video stored successfully!');
     
     // Notify background that recording is complete
     await chrome.runtime.sendMessage({ action: 'recordingStopped' });
@@ -1281,7 +1284,7 @@ async function saveRecording(blob) {
 // Stop Recording
 async function stopRecording() {
   try {
-    console.log('[Record] Stopping recording...');
+    debugLog('[Record] Stopping recording...');
     stopRecordingBtn.disabled = true;
     stopRecordingBtn.innerHTML = '<span class="btn-icon">⏳</span> Stopping...';
 
@@ -1293,16 +1296,16 @@ async function stopRecording() {
       const tab = await chrome.tabs.get(tabId).catch(() => null);
       if (tab) {
         await chrome.tabs.sendMessage(tabId, { action: 'stopTracking' });
-        console.log('[Record] Cursor tracking stopped');
+        debugLog('[Record] Cursor tracking stopped');
       }
     } catch (e) {
       // Ignore - tab might be closed or restricted
-      console.log('[Record] Could not stop tracking (tab may be restricted)');
+      debugLog('[Record] Could not stop tracking (tab may be restricted)');
     }
 
     // Stop the MediaRecorder and wait for it to finish
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      console.log('[Record] Stopping MediaRecorder, current state:', mediaRecorder.state);
+      debugLog('[Record] Stopping MediaRecorder, current state:', mediaRecorder.state);
       
       // Wait for MediaRecorder to stop and process
       const recorderStopped = new Promise((resolve) => {
@@ -1314,7 +1317,7 @@ async function stopRecording() {
         const originalOnStop = mediaRecorder.onstop;
         mediaRecorder.onstop = async () => {
           clearTimeout(timeout);
-          console.log('[Record] MediaRecorder onstop fired');
+          debugLog('[Record] MediaRecorder onstop fired');
           if (originalOnStop) {
             await originalOnStop();
           }
@@ -1336,10 +1339,10 @@ async function stopRecording() {
     
     // Now stop all tracks (after MediaRecorder has finished)
     if (mediaStream) {
-      console.log('[Record] Stopping media stream tracks...');
+      debugLog('[Record] Stopping media stream tracks...');
       mediaStream.getTracks().forEach(track => {
         track.stop();
-        console.log('[Record] Stopped track:', track.kind, track.label);
+        debugLog('[Record] Stopped track:', track.kind, track.label);
       });
       mediaStream = null;
     }
@@ -1375,7 +1378,7 @@ async function stopRecording() {
     
     // Stop optional camera / microphone streams
     if (cameraVideoStream || micStream) {
-      console.log('[Record] Stopping optional camera/mic tracks...');
+      debugLog('[Record] Stopping optional camera/mic tracks...');
       resetOptionalMediaUI();
     }
     
@@ -1386,7 +1389,7 @@ async function stopRecording() {
     recordedChunks = [];
 
     // Wait for video to be ready
-    console.log('[Record] Waiting for video data to be stored...');
+    debugLog('[Record] Waiting for video data to be stored...');
     
     let dataReady = false;
     let attempts = 0;
@@ -1408,9 +1411,9 @@ async function stopRecording() {
           openEditor();
           break;
         } else {
-          console.log(`[Record] Waiting for video data... (attempt ${attempts + 1}/${maxAttempts})`);
+          debugLog(`[Record] Waiting for video data... (attempt ${attempts + 1}/${maxAttempts})`);
           if (checkResponse) {
-            console.log('[Record] Response status:', {
+            debugLog('[Record] Response status:', {
               videoDataReady: checkResponse.videoDataReady,
               hasVideoData: !!checkResponse.videoData,
               videoDataLength: checkResponse.videoData?.length || 0
@@ -1428,7 +1431,7 @@ async function stopRecording() {
       console.error('[Record] ⚠️ Timeout waiting for video data');
       const finalCheck = await chrome.runtime.sendMessage({ action: 'getRecordingData' });
       if (finalCheck && finalCheck.videoData) {
-        console.log('[Record] Video data found on final check, opening editor');
+        debugLog('[Record] Video data found on final check, opening editor');
         openEditor();
       } else {
         throw new Error('Recording did not complete. The video data was not saved. Please try recording again.');
@@ -1446,10 +1449,10 @@ async function stopRecording() {
 
 // Open Editor
 function openEditor() {
-  console.log('[Record] Opening editor...');
+  debugLog('[Record] Opening editor...');
   const editorUrl = chrome.runtime.getURL('editor.html');
   chrome.tabs.create({ url: editorUrl }, (tab) => {
-    console.log('[Record] Editor opened in tab:', tab.id);
+    debugLog('[Record] Editor opened in tab:', tab.id);
     // Close this recording page
     setTimeout(() => window.close(), 500);
   });
@@ -1467,7 +1470,7 @@ function updateTimer() {
 // Listen for recording stopped message (from extension icon click)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'recordingStopped') {
-    console.log('[Record] Recording stopped notification received');
+    debugLog('[Record] Recording stopped notification received');
     if (isRecording) {
       stopRecording();
     }
