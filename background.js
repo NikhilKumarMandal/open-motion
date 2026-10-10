@@ -708,11 +708,12 @@ function injectCameraOverlayScript() {
       border: 3px solid rgba(255, 255, 255, 0.4);
       z-index: 2147483647;
       background: #000;
-      pointer-events: none;
+      cursor: grab;
+      touch-action: none;
       transition: opacity 0.2s ease-in-out;
       opacity: 1;
     `;
-    
+
     // Use an img element instead of video - we'll update it with frames from record.html
     const img = document.createElement('img');
     img.id = 'open-motions-camera-image';
@@ -723,20 +724,182 @@ function injectCameraOverlayScript() {
       transform: scaleX(-1);
       image-rendering: -webkit-optimize-contrast;
       image-rendering: crisp-edges;
+      pointer-events: none;
     `;
-    
+
     // Handle image load errors
     img.onerror = () => {
       console.warn('[CameraOverlay] Image load error, will retry on next frame');
     };
-    
+
+    // Drag to reposition, drag the corner to resize, double-click to cycle shape.
+    // Position/size/shape persist across recordings via chrome.storage.local.
+    const resizeHandle = document.createElement('div');
+    resizeHandle.id = 'open-motions-camera-resize-handle';
+    resizeHandle.style.cssText = `
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(0, 0, 0, 0.3);
+      cursor: nwse-resize;
+      opacity: 0;
+      transition: opacity 0.15s ease-in-out;
+      touch-action: none;
+    `;
+
     overlay.appendChild(img);
+    overlay.appendChild(resizeHandle);
     document.body.appendChild(overlay);
-    
+
+    const STORAGE_KEY = 'openMotionsCameraOverlayPrefs';
+    const MIN_SIZE = 90;
+    const MAX_SIZE = 320;
+    const SHAPES = ['circle', 'rounded', 'square'];
+    const BORDER_RADIUS = { circle: '50%', rounded: '18%', square: '8px' };
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+    const state = { leftPct: null, topPct: null, size: 160, shape: 'circle' };
+
+    function applyShape() {
+      overlay.style.borderRadius = BORDER_RADIUS[state.shape] || BORDER_RADIUS.circle;
+    }
+    function applySize() {
+      overlay.style.width = state.size + 'px';
+      overlay.style.height = state.size + 'px';
+    }
+    function applyPosition() {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const maxLeft = Math.max(0, vw - state.size);
+      const maxTop = Math.max(0, vh - state.size);
+      const left = clamp(Math.round(state.leftPct * vw), 0, maxLeft);
+      const top = clamp(Math.round(state.topPct * vh), 0, maxTop);
+      overlay.style.left = left + 'px';
+      overlay.style.top = top + 'px';
+      overlay.style.right = 'auto';
+      overlay.style.bottom = 'auto';
+    }
+    function persist() {
+      try {
+        chrome.storage.local.set({ [STORAGE_KEY]: state });
+      } catch (e) {
+        // Storage unavailable: position still works for this recording
+      }
+    }
+
+    function placeDefault() {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      state.leftPct = Math.max(0, vw - state.size - 20) / vw;
+      state.topPct = Math.max(0, vh - state.size - 20) / vh;
+    }
+
+    try {
+      chrome.storage.local.get([STORAGE_KEY], (result) => {
+        const saved = result && result[STORAGE_KEY];
+        if (saved && typeof saved.leftPct === 'number' && typeof saved.topPct === 'number') {
+          Object.assign(state, saved);
+        } else {
+          placeDefault();
+        }
+        applySize();
+        applyShape();
+        applyPosition();
+      });
+    } catch (e) {
+      placeDefault();
+      applySize();
+      applyShape();
+      applyPosition();
+    }
+
+    overlay.addEventListener('pointerenter', () => { resizeHandle.style.opacity = '1'; });
+    overlay.addEventListener('pointerleave', () => { resizeHandle.style.opacity = '0'; });
+
+    // Dragging the bubble itself
+    let dragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+    overlay.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      try { overlay.setPointerCapture(e.pointerId); } catch (e2) {}
+      overlay.style.cursor = 'grabbing';
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      const rect = overlay.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+      e.preventDefault();
+    });
+    overlay.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const newLeft = clamp(startLeft + (e.clientX - dragStartX), 0, Math.max(0, vw - state.size));
+      const newTop = clamp(startTop + (e.clientY - dragStartY), 0, Math.max(0, vh - state.size));
+      overlay.style.left = newLeft + 'px';
+      overlay.style.top = newTop + 'px';
+      overlay.style.right = 'auto';
+      overlay.style.bottom = 'auto';
+      state.leftPct = newLeft / vw;
+      state.topPct = newTop / vh;
+    });
+    overlay.addEventListener('pointerup', (e) => {
+      if (!dragging) return;
+      dragging = false;
+      overlay.style.cursor = 'grab';
+      try { overlay.releasePointerCapture(e.pointerId); } catch (e2) {}
+      persist();
+    });
+
+    // Resizing via the corner handle
+    let resizing = false;
+    let resizeStartX = 0;
+    let resizeStartSize = 0;
+    resizeHandle.addEventListener('pointerdown', (e) => {
+      resizing = true;
+      try { resizeHandle.setPointerCapture(e.pointerId); } catch (e2) {}
+      resizeStartX = e.clientX;
+      resizeStartSize = state.size;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    resizeHandle.addEventListener('pointermove', (e) => {
+      if (!resizing) return;
+      const delta = e.clientX - resizeStartX;
+      state.size = clamp(resizeStartSize + delta, MIN_SIZE, MAX_SIZE);
+      applySize();
+      applyPosition();
+      e.stopPropagation();
+    });
+    resizeHandle.addEventListener('pointerup', (e) => {
+      if (!resizing) return;
+      resizing = false;
+      try { resizeHandle.releasePointerCapture(e.pointerId); } catch (e2) {}
+      persist();
+      e.stopPropagation();
+    });
+    resizeHandle.addEventListener('dblclick', (e) => e.stopPropagation());
+
+    // Double-click the bubble (not the resize handle) to cycle its shape
+    overlay.addEventListener('dblclick', (e) => {
+      if (e.target === resizeHandle) return;
+      const idx = SHAPES.indexOf(state.shape);
+      state.shape = SHAPES[(idx + 1) % SHAPES.length];
+      applyShape();
+      persist();
+    });
+
     // Track last frame to avoid unnecessary updates and ensure fresh frames
     let lastFrameData = null;
-    
-    
+
+
     console.log('[CameraOverlay] Overlay created and appended to body');
     
     // Listen for camera frame updates from background script

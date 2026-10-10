@@ -121,6 +121,7 @@ const settings = {
   showTaskbar: true,              // false = auto-crop the OS taskbar / Dock from the bottom
   showShadow: true,
   followScroll: true,             // Zoom in and follow the cursor while the page scrolls
+  followKeystroke: true,          // Zoom in and hold while the user is typing
   cursor: { enabled: false, size: '1.5', smoothing: 'medium', hideWhenIdle: true },
   keystrokes: { enabled: true, size: 'medium', position: 'center' }
 };
@@ -638,6 +639,7 @@ function syncSettingsUI() {
   $('showShadow').checked = settings.showShadow;
   $('applyZoom').checked = settings.applyZoom;
   $('zoomOnScroll').checked = settings.followScroll;
+  $('zoomOnKeystroke').checked = settings.followKeystroke;
   $('clickEnabled').checked = settings.clickStyle !== 'none';
   $('cursorEnabled').checked = settings.cursor.enabled;
   $('cursorHideIdle').checked = settings.cursor.hideWhenIdle;
@@ -785,6 +787,13 @@ function setupEventListeners() {
   // Scroll-follow zoom
   $('zoomOnScroll').addEventListener('change', (e) => {
     settings.followScroll = e.target.checked;
+    analyzeZoom();
+    requestRedraw();
+  });
+
+  // Keystroke-follow zoom
+  $('zoomOnKeystroke').addEventListener('change', (e) => {
+    settings.followKeystroke = e.target.checked;
     analyzeZoom();
     requestRedraw();
   });
@@ -1465,7 +1474,10 @@ function analyzeZoom() {
     zoomSegments = [];
   } else {
     analyzer.ZOOM_LEVEL = zoomDepths[settings.zoomDepth];
-    zoomSegments = analyzer.analyzeClicks(cursorData, videoWidth, videoHeight, { followScroll: settings.followScroll });
+    zoomSegments = analyzer.analyzeClicks(cursorData, videoWidth, videoHeight, {
+      followScroll: settings.followScroll,
+      followKeystroke: settings.followKeystroke
+    });
     debugLog('[Editor] Found', zoomSegments.length, 'zoom segments');
   }
   selectedZoomIndex = -1;

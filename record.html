@@ -636,6 +636,7 @@
           <div class="step-content">
             <h3 class="step-title">Camera and microphone<span class="step-tag">optional</span></h3>
             <p class="step-description">The camera adds a picture-in-picture overlay. The microphone mixes your voice with the screen audio. Each asks for its own permission.</p>
+            <p class="step-description">Once the overlay appears on your recorded tab, drag it anywhere, drag its corner to resize, or double-click it to cycle between circle, rounded and square.</p>
             <div class="media-buttons">
               <button id="enableCameraBtn" class="btn btn-outline" type="button">
                 <span class="btn-icon">📹</span>
@@ -650,6 +651,13 @@
               <span class="dot"></span>
               <span id="cameraStatusText"></span>
             </div>
+            <label class="check-option" id="noiseSuppressionOption" style="margin-top: 14px;">
+              <input type="checkbox" id="noiseSuppressionCheckbox" checked>
+              <span>
+                <strong>Noise suppression</strong>
+                Filters out background hiss and room noise from the microphone, separate from echo cancellation. Turn off if it's clipping your voice.
+              </span>
+            </label>
           </div>
         </li>
 

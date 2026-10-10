@@ -133,48 +133,58 @@ if (window.__SCREEN_RECORDER_CONTENT_INJECTED__) {
     console.log('[Content] ✅ Cursor and keystroke tracking ACTIVE');
   }
 
+  // The camera overlay (draggable/resizable bubble) is injected into this same
+  // page during recording — dragging or resizing it shouldn't be recorded as a
+  // click/move for zoom purposes.
+  function isOverlayTarget(event) {
+    return !!(event.target && event.target.closest && event.target.closest('#open-motions-camera-overlay'));
+  }
+
   function handleMouseMove(event) {
-    if (!isTracking) return;
-    
+    if (!isTracking || isOverlayTarget(event)) return;
+
     const now = Date.now();
-    
+
     // Throttle cursor data sending for smooth ~30fps tracking
     if (now - lastSendTime < SEND_INTERVAL) {
       return;
     }
-    
+
     lastSendTime = now;
     moveCount++;
     sendCursorData(event, 'move');
   }
 
   function handleMouseDown(event) {
-    if (!isTracking) return;
+    if (!isTracking || isOverlayTarget(event)) return;
     // Also track mousedown for more reliable click detection
     sendCursorData(event, 'mousedown');
   }
 
   function handleClick(event) {
-    if (!isTracking) return;
+    if (!isTracking || isOverlayTarget(event)) return;
     clickCount++;
     console.log('[Content] 🖱️ Click #' + clickCount + ' at:', event.clientX, event.clientY);
     sendCursorData(event, 'click');
   }
 
   function handleDoubleClick(event) {
-    if (!isTracking) return;
+    if (!isTracking || isOverlayTarget(event)) return;
     console.log('[Content] 🖱️🖱️ Double click at:', event.clientX, event.clientY);
     sendCursorData(event, 'doubleclick');
   }
 
   function handleKeyDown(event) {
     if (!isTracking) return;
-    
-    // Don't track if typing in input fields (privacy)
+
+    // Never record *which* key was pressed in a text field (privacy) — but still
+    // mark that typing happened here (no key value) so zoom-on-keystroke can
+    // follow the user while they fill out a form or type into a search box.
     if (event.target.matches('input, textarea, [contenteditable]')) {
+      sendKeystrokeData(null, event);
       return;
     }
-    
+
     // Get key display name
     let keyDisplay = getKeyDisplayName(event);
     
@@ -309,7 +319,7 @@ if (window.__SCREEN_RECORDER_CONTENT_INJECTED__) {
       action: 'cursorMove',
       type: 'keystroke',
       key: keyDisplay,
-      keyCode: event.code,
+      keyCode: keyDisplay ? event.code : undefined,
       timestamp: Date.now(),
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight

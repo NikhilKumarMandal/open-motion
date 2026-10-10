@@ -28,6 +28,51 @@ class ZoomAnalyzer {
     // Scrolling: a burst of scroll events becomes zoom anchors at the cursor
     this.SCROLL_BURST_GAP = 700;     // Scroll events closer than this belong to one burst
     this.SCROLL_ANCHOR_EVERY = 800;  // One anchor per this many ms of scrolling
+
+    // Typing: a burst of keystrokes becomes zoom anchors at the cursor/focused field
+    this.KEYSTROKE_BURST_GAP = 1500;    // Keystrokes closer than this belong to one typing burst
+    this.KEYSTROKE_ANCHOR_EVERY = 1000; // One anchor per this many ms of typing
+  }
+
+  /**
+   * Looks up the last known cursor position at or before a given timestamp.
+   * Shared by scrollAnchors/keystrokeAnchors since neither scroll nor keystroke
+   * events carry their own coordinates.
+   */
+  _cursorPositionLookup(cursorData) {
+    const moves = cursorData
+      .filter(d => (d.type === 'move' || d.type === 'click' || d.type === 'mousedown') && d.normalizedX !== undefined)
+      .sort((a, b) => a.timestamp - b.timestamp);
+    return (t) => {
+      let last = null;
+      for (const m of moves) {
+        if (m.timestamp > t) break;
+        last = m;
+      }
+      return last
+        ? { normalizedX: last.normalizedX, normalizedY: last.normalizedY }
+        : { normalizedX: 0.5, normalizedY: 0.5 };
+    };
+  }
+
+  /**
+   * Turn a burst of timestamps into click-like anchors positioned at the cursor.
+   * Used for both scroll bursts and typing bursts.
+   */
+  _burstAnchors(timestamps, cursorAt, burstGap, anchorEvery, type) {
+    const anchors = [];
+    let burstStart = timestamps[0];
+    let lastAnchor = -Infinity;
+    for (let i = 0; i < timestamps.length; i++) {
+      const t = timestamps[i];
+      if (i > 0 && t - timestamps[i - 1] > burstGap) burstStart = t;
+      const isBurstEnd = i === timestamps.length - 1 || timestamps[i + 1] - t > burstGap;
+      if (t === burstStart || t - lastAnchor >= anchorEvery || isBurstEnd) {
+        anchors.push({ type, timestamp: t, ...cursorAt(t) });
+        lastAnchor = t;
+      }
+    }
+    return anchors;
   }
 
   /**
@@ -38,33 +83,20 @@ class ZoomAnalyzer {
     const scrolls = cursorData.filter(d => d.type === 'scroll').map(d => d.timestamp).sort((a, b) => a - b);
     if (scrolls.length === 0) return [];
 
-    const moves = cursorData
-      .filter(d => (d.type === 'move' || d.type === 'click' || d.type === 'mousedown') && d.normalizedX !== undefined)
-      .sort((a, b) => a.timestamp - b.timestamp);
-    const cursorAt = (t) => {
-      let last = null;
-      for (const m of moves) {
-        if (m.timestamp > t) break;
-        last = m;
-      }
-      return last
-        ? { normalizedX: last.normalizedX, normalizedY: last.normalizedY }
-        : { normalizedX: 0.5, normalizedY: 0.5 };
-    };
+    const cursorAt = this._cursorPositionLookup(cursorData);
+    return this._burstAnchors(scrolls, cursorAt, this.SCROLL_BURST_GAP, this.SCROLL_ANCHOR_EVERY, 'scroll');
+  }
 
-    const anchors = [];
-    let burstStart = scrolls[0];
-    let lastAnchor = -Infinity;
-    for (let i = 0; i < scrolls.length; i++) {
-      const t = scrolls[i];
-      if (i > 0 && t - scrolls[i - 1] > this.SCROLL_BURST_GAP) burstStart = t;
-      const isBurstEnd = i === scrolls.length - 1 || scrolls[i + 1] - t > this.SCROLL_BURST_GAP;
-      if (t === burstStart || t - lastAnchor >= this.SCROLL_ANCHOR_EVERY || isBurstEnd) {
-        anchors.push({ type: 'scroll', timestamp: t, ...cursorAt(t) });
-        lastAnchor = t;
-      }
-    }
-    return anchors;
+  /**
+   * Turn typing bursts into click-like anchors positioned at the cursor/focused
+   * field, so the camera zooms in and holds while the user is typing.
+   */
+  keystrokeAnchors(cursorData) {
+    const keys = cursorData.filter(d => d.type === 'keystroke').map(d => d.timestamp).sort((a, b) => a - b);
+    if (keys.length === 0) return [];
+
+    const cursorAt = this._cursorPositionLookup(cursorData);
+    return this._burstAnchors(keys, cursorAt, this.KEYSTROKE_BURST_GAP, this.KEYSTROKE_ANCHOR_EVERY, 'keystroke');
   }
 
   /**
@@ -83,7 +115,10 @@ class ZoomAnalyzer {
     if (options.followScroll) {
       clicks.push(...this.scrollAnchors(cursorData));
     }
-    
+    if (options.followKeystroke) {
+      clicks.push(...this.keystrokeAnchors(cursorData));
+    }
+
     console.log('[ZoomAnalyzer] Found', clicks.length, 'click events');
     
     if (clicks.length === 0) {

@@ -61,6 +61,7 @@ try {
 const selectScreenBtn = document.getElementById('selectScreenBtn');
 const enableCameraBtn = document.getElementById('enableCameraBtn');
 const enableMicBtn = document.getElementById('enableMicBtn');
+const noiseSuppressionCheckbox = document.getElementById('noiseSuppressionCheckbox');
 const cameraStatus = document.getElementById('cameraStatus');
 const cameraStatusText = document.getElementById('cameraStatusText');
 
@@ -463,10 +464,12 @@ async function enableMicrophone() {
       micStream = null;
     }
 
+    const noiseSuppression = noiseSuppressionCheckbox ? noiseSuppressionCheckbox.checked : true;
+
     micStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
-        noiseSuppression: true,
+        noiseSuppression,
         autoGainControl: true,
         sampleRate: { ideal: 48000, min: 44100 },
         channelCount: { ideal: 2, min: 1 }
@@ -474,7 +477,9 @@ async function enableMicrophone() {
       video: false
     });
 
-    console.log('[Record] Microphone enabled, audio tracks:', micStream.getAudioTracks().length);
+    if (noiseSuppressionCheckbox) noiseSuppressionCheckbox.disabled = true;
+
+    console.log('[Record] Microphone enabled, audio tracks:', micStream.getAudioTracks().length, '- noise suppression:', noiseSuppression);
     micStream.getAudioTracks().forEach((track, i) => {
       const settings = track.getSettings();
       console.log(`[Record] Microphone ${i + 1}:`, {
@@ -491,6 +496,7 @@ async function enableMicrophone() {
         enableMicBtn.innerHTML = '<span class="btn-icon">🎤</span> Enable microphone';
         enableMicBtn.classList.add('btn-outline');
         enableMicBtn.classList.remove('btn-primary');
+        if (noiseSuppressionCheckbox) noiseSuppressionCheckbox.disabled = false;
         updateOptionalMediaStatus();
       };
     });
@@ -505,6 +511,7 @@ async function enableMicrophone() {
     console.error('[Record] Microphone error:', error);
     enableMicBtn.disabled = false;
     enableMicBtn.innerHTML = '<span class="btn-icon">🎤</span> Enable microphone';
+    if (noiseSuppressionCheckbox) noiseSuppressionCheckbox.disabled = false;
     if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
       alert('Microphone permission denied. Allow microphone access to record your voice.');
     } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
@@ -533,6 +540,7 @@ function resetOptionalMediaUI() {
   enableMicBtn.innerHTML = '<span class="btn-icon">🎤</span> Enable microphone';
   enableMicBtn.classList.add('btn-outline');
   enableMicBtn.classList.remove('btn-primary');
+  if (noiseSuppressionCheckbox) noiseSuppressionCheckbox.disabled = false;
   cameraStatus.style.display = 'none';
 }
 
