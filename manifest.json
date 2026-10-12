@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Open-Motions - Open Source Screen Recorder with Auto Zoom",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Free & open-source screen recorder. Create beautiful recordings with automatic cinematic zoom & pan — 100% offline, no sign-up.",
   "permissions": [
     "activeTab",
