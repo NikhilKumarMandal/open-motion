@@ -471,14 +471,26 @@ class VideoProcessor {
         // For H.264/MP4, ensure we're using the best profile
         if (mimeType.includes('mp4') || mimeType.includes('avc1')) {
           // Try to use high profile for better quality
-          const highProfileCodecs = [
-            'video/mp4;codecs=avc1.640032', // High Profile Level 5.0 — better for 4K when supported
-            'video/mp4;codecs=avc1.640028', // High Profile Level 4.0
-            'video/mp4;codecs=avc1.64001F', // High Profile Level 3.1
-            'video/mp4;codecs=avc1.42E01E', // Baseline Profile (fallback)
-            'video/mp4'
+          const h264Profiles = [
+            'avc1.640032', // High Profile Level 5.0 — better for 4K when supported
+            'avc1.640028', // High Profile Level 4.0
+            'avc1.64001F', // High Profile Level 3.1
+            'avc1.42E01E'  // Baseline Profile (fallback)
           ];
-          
+
+          const highProfileCodecs = [];
+          for (const profile of h264Profiles) {
+            // Always try the AAC-paired variant first. A bare
+            // "video/mp4;codecs=avc1.xxx" with an audio track still attached
+            // lets Chrome pick its own audio codec for the mp4 container,
+            // which is Opus-in-mp4 — not standard AAC, so platforms like
+            // X/Twitter and Instagram reject the upload with "incompatible
+            // audio codec" even though the file plays fine locally.
+            if (hasAudio) highProfileCodecs.push(`video/mp4;codecs=${profile},mp4a.40.2`);
+            highProfileCodecs.push(`video/mp4;codecs=${profile}`);
+          }
+          highProfileCodecs.push('video/mp4');
+
           for (const codec of highProfileCodecs) {
             if (MediaRecorder.isTypeSupported(codec)) {
               recorderOptions.mimeType = codec;
@@ -696,64 +708,31 @@ class VideoProcessor {
       let isProcessing = true;
       let lastProgress = 0;
       let frameIndex = 0;
-      
-      // Frame rate control variables - strict 60fps output
-      const targetFrameInterval = this.frameTiming.frameInterval; // ms per frame (~16.67ms for 60fps)
-      let lastFrameTimestamp = performance.now();
-      let lastVideoTime = startTime;
-      let frameTimeoutId = null;
-      // Initialize to current time since first frame is drawn immediately
-      // It will be incremented by targetFrameInterval after first frame, scheduling second frame correctly
-      let nextFrameTime = performance.now();
-      let frameStartTime = performance.now(); // Track when frame drawing started
-      
-      // Store previous frame for interpolation/filler frames
-      let previousFrameData = null;
-      let previousVideoTime = startTime;
-      let lastDrawnVideoTime = startTime;
-      
-      
-      const drawFrame = async () => {
+      let rvfcHandle = null;
+
+      const finish = () => {
         if (!isProcessing) return;
-        
-        const frameStart = performance.now();
-        const elapsed = frameStart - lastFrameTimestamp;
-        
-        // Check if we've reached the end time - don't stop on video.ended, only on reaching endTime
-        // This ensures we process the full trimmed duration even if video naturally ends
-        const currentTime = this.video.currentTime;
-        const hasReachedEnd = currentTime >= endTime;
-        
-        // If video ended but we haven't reached endTime, seek forward to continue
-        if (this.video.ended && !hasReachedEnd) {
-          debugLog('[VideoProcessor] Video ended early at', currentTime, 'but need to reach', endTime, '- seeking forward');
-          // Try to seek slightly past current time to continue playback
-          this.video.currentTime = Math.min(currentTime + 0.1, endTime);
-          await new Promise(res => {
-            const timeout = setTimeout(res, 100);
-            this.video.onseeked = () => {
-              clearTimeout(timeout);
-              res();
-            };
-          });
-          // Resume playback if paused
-          if (this.video.paused) {
-            await this.video.play().catch(e => console.warn('[VideoProcessor] Play error:', e));
+        isProcessing = false;
+        if (rvfcHandle !== null) {
+          if (this.video.cancelVideoFrameCallback) {
+            this.video.cancelVideoFrameCallback(rvfcHandle);
+          } else {
+            cancelAnimationFrame(rvfcHandle);
           }
         }
-        
-        if (hasReachedEnd) {
-          debugLog('[VideoProcessor] Reached end time:', endTime, 'at currentTime:', currentTime);
-          isProcessing = false;
-          if (frameTimeoutId) clearTimeout(frameTimeoutId);
-          if (onProgress) onProgress(100);
-          resolve();
-          return;
-        }
-        
-        const currentVideoTime = this.video.currentTime;
+        if (onProgress) onProgress(100);
+        resolve();
+      };
+
+      // Draws whatever frame the decoder just presented. Called from
+      // requestVideoFrameCallback below — once per *real* decoded frame, never
+      // guessed from polling currentTime — so we never duplicate/skip frames
+      // ourselves. canvas.captureStream(fps) already paces/duplicates the
+      // output on its own; doing it twice (here + natively) is what caused
+      // the stutter and, by hogging the main thread every setTimeout tick,
+      // the audio crackle too.
+      const drawFrame = (currentVideoTime) => {
         const timestamp = currentVideoTime * 1000;
-        const videoTimeDelta = currentVideoTime - lastDrawnVideoTime;
         const zoomState = this.analyzer.getZoomAtTime(timestamp, zoomSegments, srcWidth, srcHeight);
 
         // Draw background
@@ -774,14 +753,7 @@ class VideoProcessor {
           offsetY = (0.5 - normY) * outHeight * (zoomScale - 1) * panMultiplier;
         }
 
-        // Determine if we should use a new video frame or filler frame
-        // Always output at 60fps - use new video frame if available, otherwise duplicate previous
-        const minFrameInterval = targetFrameInterval / 1000; // Convert to seconds (~0.01667s for 60fps)
-        // Use 110% threshold - be more aggressive about generating filler frames
-        // Since video often advances at ~0.017-0.020s (50-59fps), we need more filler frames to reach 60fps
-        const isNewVideoFrame = videoTimeDelta >= minFrameInterval * 1.1;
-        
-        if (isNewVideoFrame || !previousFrameData) {
+        {
           // Calculate crop values if browser UI should be hidden
           let sourceX = 0;
           let sourceY = 0;
@@ -897,11 +869,26 @@ class VideoProcessor {
           this.ctx.imageSmoothingEnabled = true;
           this.ctx.imageSmoothingQuality = 'high';
           
-          this.ctx.drawImage(
-            this.video,
-            sourceX, sourceY, sourceWidth, sourceHeight,
-            dx, dy, dw, dh
-          );
+          // Draw the full, uncropped video frame and let the clip above hide
+          // the cropped-out slice, instead of passing a cropped source rect
+          // to drawImage. Chrome's hardware fast path for blitting a
+          // <video> frame only kicks in when the source rect is the whole
+          // frame — any sub-rectangle (e.g. browser-UI or taskbar/Dock crop)
+          // forces a software readback+crop on every frame, which is what
+          // made export stutter worse whenever a crop was enabled.
+          if (sourceX === 0 && sourceY === 0 && sourceWidth === srcWidth && sourceHeight === srcHeight) {
+            this.ctx.drawImage(this.video, dx, dy, dw, dh);
+          } else {
+            const scaleX = dw / sourceWidth;
+            const scaleY = dh / sourceHeight;
+            this.ctx.drawImage(
+              this.video,
+              dx - sourceX * scaleX,
+              dy - sourceY * scaleY,
+              srcWidth * scaleX,
+              srcHeight * scaleY
+            );
+          }
           
           // Restore smoothing setting
           this.ctx.imageSmoothingEnabled = wasSmoothingEnabled;
@@ -931,38 +918,10 @@ class VideoProcessor {
             this.overlays.drawKeystrokes(this.ctx, this.keyTrack, timestamp, area, this.settings.keystrokes);
           }
 
-          if (isNewVideoFrame) {
-            lastDrawnVideoTime = this.video.currentTime;
-            previousVideoTime = this.video.currentTime;
-          } else {
-            // First frame
-            lastDrawnVideoTime = this.video.currentTime;
-            previousVideoTime = this.video.currentTime;
+          if (this.settings.showWebcam && this.webcamVideo) {
+            this.drawWebcam(padding, outWidth, outHeight);
           }
-        } else {
-          // Use filler frame - draw complete previous frame (includes all effects, border, and webcam)
-          // Draw directly to canvas without transformations since previousFrameData is a complete snapshot
-          this.ctx.drawImage(
-            previousFrameData,
-            0, 0, previousFrameData.width, previousFrameData.height,
-            0, 0, this.canvas.width, this.canvas.height
-          );
-          // Skip drawing webcam since it's already included in previousFrameData
         }
-        
-        // Draw webcam only for new video frames (filler frames already include webcam)
-        if ((isNewVideoFrame || !previousFrameData) && this.settings.showWebcam && this.webcamVideo) {
-          this.drawWebcam(padding, outWidth, outHeight);
-        }
-        
-        // Capture complete frame (after all drawing: video, clicks, border, webcam) for future filler frames
-        if (!previousFrameData) {
-          previousFrameData = document.createElement('canvas');
-          previousFrameData.width = this.canvas.width;
-          previousFrameData.height = this.canvas.height;
-        }
-        const prevCtx = previousFrameData.getContext('2d');
-        prevCtx.drawImage(this.canvas, 0, 0);
 
         // Let the caller sample finished frames (used for GIF export)
         if (typeof this.settings.onFrame === 'function') {
@@ -978,53 +937,64 @@ class VideoProcessor {
           this.frameTiming.frameCount = 0;
           this.frameTiming.lastFpsUpdate = currentTimeForFps;
         }
-        
-        // Progress
-        const progress = ((this.video.currentTime - startTime) / duration) * 100;
+
+        // Debug logging for duration tracking
+        if (frameIndex % 300 === 0) { // Log every 300 frames (~10 seconds at 30fps)
+          debugLog('[VideoProcessor] Frame', frameIndex, '- currentTime:', currentVideoTime.toFixed(2),
+                      '/ endTime:', endTime.toFixed(2));
+        }
+      };
+
+      // Fires once per actual decoded video frame (synced to the real decode/
+      // compositor cadence), so we draw exactly when there's new content —
+      // never guessing, never duplicating ourselves.
+      const onVideoFrame = (now, metadata) => {
+        if (!isProcessing) return;
+
+        const currentVideoTime = (metadata && typeof metadata.mediaTime === 'number')
+          ? metadata.mediaTime
+          : this.video.currentTime;
+
+        if (currentVideoTime >= endTime || this.video.ended) {
+          debugLog('[VideoProcessor] Reached end time:', endTime, 'at currentTime:', currentVideoTime);
+          finish();
+          return;
+        }
+
+        drawFrame(currentVideoTime);
+        frameIndex++;
+
+        const progress = ((currentVideoTime - startTime) / duration) * 100;
         if (onProgress && progress - lastProgress > 1) {
           onProgress(Math.min(99, progress));
           lastProgress = progress;
         }
-        
-        // Debug logging for duration tracking
-        if (frameIndex % 300 === 0) { // Log every 300 frames (~10 seconds at 30fps)
-          debugLog('[VideoProcessor] Frame', frameIndex, '- currentTime:', this.video.currentTime.toFixed(2), 
-                      '/ endTime:', endTime.toFixed(2), '- progress:', progress.toFixed(1) + '%');
-        }
-        
-        frameIndex++;
-        const frameEndTime = performance.now();
-        const frameExecutionTime = frameEndTime - frameStart;
-        lastFrameTimestamp = frameEndTime;
-        
-        // Schedule next frame with precise timing
-        // Calculate when the next frame should start (based on target interval)
-        nextFrameTime = nextFrameTime + targetFrameInterval;
-        const currentPerformanceTime = performance.now();
-        const timeUntilNextFrame = nextFrameTime - currentPerformanceTime;
-        
-        // Cap execution time to prevent spikes from breaking timing (max 2x target interval)
-        const cappedExecutionTime = Math.min(frameExecutionTime, targetFrameInterval * 2);
-        
-        // Adjust delay to account for execution time, but maintain strict timing
-        const adjustedDelay = Math.max(0, timeUntilNextFrame);
-        
-        // Use setTimeout with precise timing
-        // If we're behind schedule (negative delay), schedule immediately to catch up
-        if (adjustedDelay <= 0) {
-          // We're behind - schedule immediately to catch up
-          frameTimeoutId = setTimeout(() => {
-            drawFrame();
-          }, 0);
-          // Reset nextFrameTime to current time to prevent drift
-          nextFrameTime = currentPerformanceTime + targetFrameInterval;
-        } else {
-          frameTimeoutId = setTimeout(() => {
-            drawFrame();
-          }, adjustedDelay);
+
+        if (isProcessing) {
+          scheduleVideoFrame();
         }
       };
-      
+
+      const supportsRVFC = typeof this.video.requestVideoFrameCallback === 'function';
+      let lastScheduledTime = -1;
+      const scheduleVideoFrame = () => {
+        if (supportsRVFC) {
+          rvfcHandle = this.video.requestVideoFrameCallback(onVideoFrame);
+          return;
+        }
+        // Fallback for engines without requestVideoFrameCallback: poll via
+        // rAF but only draw once per actual decoded frame (currentTime
+        // change), same contract as the rVFC path above.
+        rvfcHandle = requestAnimationFrame(() => {
+          if (this.video.currentTime !== lastScheduledTime) {
+            lastScheduledTime = this.video.currentTime;
+            onVideoFrame(performance.now(), null);
+          } else if (isProcessing) {
+            scheduleVideoFrame();
+          }
+        });
+      };
+
       // Don't stop on video.ended - only stop when we reach endTime
       // This ensures we process the full trimmed duration
       this.video.onended = () => {
@@ -1033,10 +1003,7 @@ class VideoProcessor {
         // Only stop if we've actually reached or passed endTime
         if (currentTime >= endTime && isProcessing) {
           debugLog('[VideoProcessor] Stopping - reached endTime');
-          isProcessing = false;
-          if (frameTimeoutId) clearTimeout(frameTimeoutId);
-          if (onProgress) onProgress(100);
-          resolve();
+          finish();
         } else if (isProcessing) {
           // Video ended early - try to continue by seeking
           debugLog('[VideoProcessor] Video ended early, attempting to continue...');
@@ -1044,10 +1011,10 @@ class VideoProcessor {
           this.video.play().catch(e => console.warn('[VideoProcessor] Play error after seek:', e));
         }
       };
-      
+
       // Let video play normally, but control output frame rate
       this.video.playbackRate = 1.0;
-      
+
       // Ensure video doesn't pause during processing
       this.video.addEventListener('pause', () => {
         if (isProcessing && this.video.currentTime < endTime) {
@@ -1055,17 +1022,16 @@ class VideoProcessor {
           this.video.play().catch(e => console.warn('[VideoProcessor] Resume error:', e));
         }
       });
-      
+
       // Initialize frame timing
       this.frameTiming.lastFrameTime = performance.now();
       this.frameTiming.lastFpsUpdate = performance.now();
       this.frameTiming.frameCount = 0;
-      
+
       // Start video playback
       this.video.play().then(() => {
         debugLog('[VideoProcessor] Video playback started, processing frames from', startTime, 'to', endTime);
-        // Start frame loop with precise timing
-        drawFrame();
+        scheduleVideoFrame();
       }).catch(err => {
         console.error('[VideoProcessor] Play error:', err);
         resolve();
